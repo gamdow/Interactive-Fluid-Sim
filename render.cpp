@@ -7,8 +7,8 @@
 #include "helper_math.h"
 #include "kernels.cuh"
 
-Renderer::Renderer(int2 _dimensions, int _buffer, dim3 _block_size)
-  : Kernels(_dimensions, _buffer, _block_size)
+Renderer::Renderer(Kernels & _kernels)
+  : __kernels(_kernels)
   , __window(nullptr)
   , __context(nullptr) {
 
@@ -17,7 +17,7 @@ Renderer::Renderer(int2 _dimensions, int _buffer, dim3 _block_size)
     return;
   }
 
-  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, _dimensions.x, _dimensions.y, SDL_WINDOW_OPENGL);
+  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, _kernels.__dims.x, _kernels.__dims.y, SDL_WINDOW_OPENGL);
   if(__window == nullptr) {
     ReportFailure();
     return;
@@ -48,7 +48,7 @@ Renderer::Renderer(int2 _dimensions, int _buffer, dim3 _block_size)
   glBindTexture(GL_TEXTURE_2D, __renderTex); {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _dimensions.x, _dimensions.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _kernels.__dims.x, _kernels.__dims.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   // Register texture as surface reference (can't write to texture directly)
@@ -93,7 +93,7 @@ void Renderer::copyToSurface(float2 * _array, float _mul) {
     wdsc.res.array.array = writeArray;
     cudaSurfaceObject_t writeSurface;
     cudaCreateSurfaceObject(&writeSurface, &wdsc);
-    hsv2rgba(writeSurface, _array, _mul);
+    __kernels.hsv2rgba(writeSurface, _array, _mul);
     cudaDestroySurfaceObject(writeSurface);
   } cudaGraphicsUnmapResources(1, &__renderTexSurface);
 
@@ -109,7 +109,7 @@ void Renderer::copyToSurface(float * _array, float _mul) {
     wdsc.res.array.array = writeArray;
     cudaSurfaceObject_t writeSurface;
     cudaCreateSurfaceObject(&writeSurface, &wdsc);
-    v2rgba(writeSurface, _array, _mul);
+    __kernels.v2rgba(writeSurface, _array, _mul);
     cudaDestroySurfaceObject(writeSurface);
   } cudaGraphicsUnmapResources(1, &__renderTexSurface);
 

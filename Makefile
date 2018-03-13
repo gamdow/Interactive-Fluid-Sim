@@ -1,23 +1,27 @@
+BUILDDIR = build
+
 CPP_SRC = $(wildcard *.cpp)
 CU_SRC = $(wildcard *.cu)
-OBJS = ${CU_SRC:.cu=.o} ${CPP_SRC:.cpp=.o}
+OBJS = $(patsubst %.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst %.cpp,$(BUILDDIR)/%.o,$(CPP_SRC))
 
 CC = nvcc
 CXX = nvcc
 NVCC_INCS = -I/usr/include/SDL2
 NVCC_LIBS = -lSDL2 -lGLEW -lGL
 
-go: clean run
-	./run
+go: clean $(BUILDDIR)/run
+	$(BUILDDIR)/run
 
-%.o: %.cpp
+$(BUILDDIR)/%.o: %.cpp
+	@mkdir -p build
 	$(CXX) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $+
 
-%.o: %.cu
+$(BUILDDIR)/%.o: %.cu
+	@mkdir -p build
 	$(CC) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $+
 
-run: $(OBJS)
+$(BUILDDIR)/run: $(OBJS)
 	$(CC) $(NVCC_LIBS) -o $@ $+
 
 clean:
-	rm -f run *.o*
+	rm -rf $(BUILDDIR)

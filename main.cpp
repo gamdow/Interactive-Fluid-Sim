@@ -7,16 +7,15 @@
 #include <iostream>
 #include <vector>
 
-#include "helper_math.h"
-#include "simulation.hpp"
-#include "memory.hpp"
-#include "interface.hpp"
-#include "render.hpp"
 #include "configuration.cuh"
+#include "helper_math.h"
+#include "interface.hpp"
+#include "kernels.cuh"
+#include "memory.hpp"
+#include "render.hpp"
+#include "simulation.hpp"
 
 void quit(int _code, char const * _message);
-void advanceSim(cudaGraphicsResource_t & _viewCudaResource);
-void applyBoundary(int2 _dims, float _vel, MirroredArray<float2> & io_velocity, MirroredArray<float> & io_fluidCells);
 
 enum Mode : int {
   velocity = 0,
@@ -25,8 +24,9 @@ enum Mode : int {
 };
 
 int main(int argc, char * argv[]) {
-  Renderer renderer(RESOLUTION, BUFFER, BLOCK_SIZE);
-  Simulation sim(RESOLUTION, BUFFER, BLOCK_SIZE);
+  Kernels kernels(RESOLUTION, BUFFER, BLOCK_SIZE);
+  Renderer renderer(kernels);
+  Simulation sim(kernels);
 
   float init_velocity = 1.0f;
   sim.applyBoundary(init_velocity);
@@ -71,17 +71,16 @@ int main(int argc, char * argv[]) {
 
     if(stop) break;
 
-    float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     switch(mode) {
       case Mode::velocity: renderer.copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
       case Mode::divergence: renderer.copyToSurface(sim.__divergence, 0.1f * vis_multiplier); break;
       case Mode::pressure: renderer.copyToSurface(sim.__pressure, 50.0f * vis_multiplier); break;
     }
 
+    float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     renderer.render(magnification, offset);
 
     float2 const dx = make_float2(LENGTH.x / RESOLUTION.x, LENGTH.y / RESOLUTION.y);
-
     sim.step(dx, 1.0f / FRAME_RATE);
 
     int elasped = SDL_GetTicks() - time;

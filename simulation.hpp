@@ -2,11 +2,12 @@
 
 #include <cuda_runtime.h>
 
-#include "kernels.cuh"
 #include "memory.hpp"
 
-struct Simulation : public Kernels {
-  Simulation(int2 _dimensions, int _buffer, dim3 _block_size);
+struct Kernels;
+
+struct Simulation {
+  Simulation(Kernels & _kernels);
   virtual ~Simulation();
   void applyBoundary(float _vel);
   void step(float2 _d, float _dt);
@@ -16,5 +17,6 @@ struct Simulation : public Kernels {
   float * __pressure;
   float * __buffer;
 private:
+  Kernels & __kernels;
   int __buffered_size;
 };

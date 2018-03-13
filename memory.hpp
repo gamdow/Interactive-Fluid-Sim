@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstring>
+#include <cuda_runtime.h>
 
 // Class of managing data mirrored in host and device memory
 template<class T>
@@ -12,9 +13,11 @@ struct MirroredArray {
   {}
   MirroredArray(int _size)
     : size(_size)
+    , host(nullptr)
+    , device(nullptr)
   {
     host = new T [size];
-    //std::memset(host, 0, size * sizeof(host[0]));
+    std::memset(host, 0, size * sizeof(T));
     cudaMalloc((void **) & device, size * sizeof(T));
     cudaMemset(device, 0, size * sizeof(T));
   }

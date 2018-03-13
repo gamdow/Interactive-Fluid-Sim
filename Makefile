@@ -1,17 +1,23 @@
+CPP_SRC = $(wildcard *.cpp)
+CU_SRC = $(wildcard *.cu)
+OBJS = ${CU_SRC:.cu=.o} ${CPP_SRC:.cpp=.o}
+
 CC = nvcc
-NVCC_FLAGS = -I/usr/include/SDL2 -lSDL2 -lGLEW -lGLU -lGL
+CXX = nvcc
+NVCC_INCS = -I/usr/include/SDL2
+NVCC_LIBS = -lSDL2 -lGLEW -lGL
 
 go: clean run
 	./run
 
-run: main.o kernels.o
-	$(CC) $(NVCC_FLAGS) -o $@ $+
+%.o: %.cpp
+	$(CXX) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $+
 
-main.o: main.cpp
-	$(CC) $(NVCC_FLAGS) -o $@ -c $<
+%.o: %.cu
+	$(CC) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $+
 
-kernels.o: kernels.cu
-	$(CC) $(NVCC_FLAGS) -o $@ -c $<
+run: $(OBJS)
+	$(CC) $(NVCC_LIBS) -o $@ $+
 
 clean:
-	rm -f run *.o
+	rm -f run *.o*

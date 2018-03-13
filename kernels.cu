@@ -2,11 +2,9 @@
 
 #include "helper_math.h"
 #include "helper_cuda.h"
-#include "utility.hpp"
-#include "configuration.cuh"
 
-#include <stdio.h>
-#include <iostream>
+#include <iostream> // for host code
+#include <stdio.h> // for kernel code
 
 float const PI = 3.14159265359f;
 
@@ -19,16 +17,51 @@ __global__ void enforce_slip(float2 * io_velocity, float * _fluid, int3 _buffer_
 __global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 * _array, float _power, int3 _buffer_spec);
 __global__ void d_to_rgba(cudaSurfaceObject_t o_surface, float * _array, float _multiplier, int3 _buffer_spec);
 
-
-
-Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size) {
+Kernels::Kernels(int2 _dims, int _buffer) {
   std::cout << std::endl;
   reportCapability();
   std::cout << std::endl;
   optimiseBlockSize(_dims, _buffer);
   std::cout << std::endl;
+  initTextureObject();
+}
 
+Kernels::~Kernels() {
+  checkCudaErrors(cudaDestroyTextureObject(__tex_object));
+  checkCudaErrors(cudaFree(__tex_buffer));
+}
 
+void Kernels::reportCapability() const {
+  int deviceCount = 0;
+  cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
+  for(int dev = 0; dev < deviceCount; ++dev) {
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, dev);
+    std::cout << "CUDA Device: " << dev << ":" << deviceProp.name << std::endl;
+    std::cout << "\tCapability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
+    int driverVersion = 0, runtimeVersion = 0;
+    cudaDriverGetVersion(&driverVersion);
+    cudaRuntimeGetVersion(&runtimeVersion);
+    std::cout << "\tRuntime/Driver: " << runtimeVersion << "/" << driverVersion << std::endl;
+  }
+}
+
+// Use CUDA's occupancy to determine the optimal blocksize and adjust the screen (and therefore array) resolution to be an integer multiple (then there's no need for bounds checking in the kernels).
+void Kernels::optimiseBlockSize(int2 _dims, int _buffer) {
+  std::cout << "Desired Resolution: " << _dims.x << " x " << _dims.y << std::endl;
+  int N = _dims.x * _dims.y;
+  int blockSize, minGridSize;   cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, pressure_solve, 0, N);
+  __block = dim3(32u, blockSize / 32u);
+  std::cout << "Optimal Block: " << __block.x << " x " << __block.y << std::endl;
+  __grid = dim3(_dims.x / __block.x, _dims.y / __block.y);
+  __dims = make_int2(__grid.x * __block.x, __grid.y * __block.y);
+  std::cout << "Adjusted Resolution: " << __dims.x << " x " << __dims.y << std::endl;
+  __buffer_spec = make_int3(__dims.x + 2 * _buffer, __dims.y + 2 * _buffer, _buffer);
+  __buffered_size = __buffer_spec.x * __buffer_spec.y;
+}
+
+// Initialise the Texture Object required by advect_velocity's interpolated sampling.
+void Kernels::initTextureObject() {
   checkCudaErrors(cudaMallocPitch(&__tex_buffer, &__tex_pitch, sizeof(float2) * __buffer_spec.x, __buffer_spec.y));
   cudaResourceDesc resDesc; memset(&resDesc, 0, sizeof(resDesc));
   resDesc.resType = cudaResourceTypePitch2D;
@@ -43,42 +76,6 @@ Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size) {
   texDesc.filterMode = cudaFilterModeLinear;
   texDesc.readMode = cudaReadModeElementType;
   checkCudaErrors(cudaCreateTextureObject(&__tex_object, &resDesc, &texDesc, nullptr));
-}
-
-Kernels::~Kernels() {
-  checkCudaErrors(cudaDestroyTextureObject(__tex_object));
-  checkCudaErrors(cudaFree(__tex_buffer));
-}
-
-void Kernels::reportCapability() const {
-  int deviceCount = 0;
-  cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
-
-  for(int dev = 0; dev < deviceCount; ++dev) {
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, dev);
-
-    std::cout << "CUDA Device: " << dev << ":" << deviceProp.name << std::endl;
-
-    int driverVersion = 0, runtimeVersion = 0;
-    cudaDriverGetVersion(&driverVersion);
-    cudaRuntimeGetVersion(&runtimeVersion);
-    std::cout << "\tRuntime/Driver: " << runtimeVersion << "/" << driverVersion << std::endl;
-    std::cout << "\tCapability Major.Minor: " << deviceProp.major << "." << deviceProp.minor << std::endl;
-  }
-}
-
-void Kernels::optimiseBlockSize(int2 _dims, int _buffer) {
-  std::cout << "Desired Resolution: " << _dims.x << " x " << _dims.y << std::endl;
-  int N = _dims.x * _dims.y;
-  int blockSize, minGridSize;   cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, pressure_solve, 0, N);
-  __block = dim3(32, blockSize / 32);
-  std::cout << "Optimal Block: " << __block.x << " x " << __block.y << std::endl;
-  __grid = dim3(_dims.x / __block.x, _dims.y / __block.y);
-  __dims = make_int2(__grid.x * __block.x, __grid.y * __block.y);
-  std::cout << "Adjusted Resolution: " << __dims.x << " x " << __dims.y << std::endl;
-  __buffer_spec = make_int3(__dims.x + 2 * _buffer, __dims.y + 2 * _buffer, _buffer);
-  __buffered_size = __buffer_spec.x * __buffer_spec.y;
 }
 
 struct Index {
@@ -149,7 +146,7 @@ __global__ void enforce_slip(float2 * io_velocity, float * _fluid, int3 _buffer_
 __global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 * _array, float _power, int3 _buffer_spec) {
   Index ih(_buffer_spec);
   float h = 6.0f * (atan2f(-_array[ih.idx].x, -_array[ih.idx].y) / (2 * PI) + 0.5);
-  float v = powf(_array[ih.idx].x * _array[ih.idx].x + _array[ih.idx].y * _array[ih.idx].y, _power);
+  float v = __powf(_array[ih.idx].x * _array[ih.idx].x + _array[ih.idx].y * _array[ih.idx].y, _power);
   float hi = floorf(h);
   float f = h - hi;
   float q = v * (1 - f);

@@ -11,7 +11,11 @@
 Renderer::Renderer(Kernels & _kernels)
   : __kernels(_kernels)
   , __window(nullptr)
-  , __context(nullptr) {
+  , __context(nullptr)
+  , __visTexture(0u)
+  , __visSurface(nullptr)
+  , __textTexture(0u)
+  , __textSurface(nullptr) {
 
   if(SDL_Init(SDL_INIT_VIDEO) < 0) {
     ReportFailure();
@@ -24,13 +28,10 @@ Renderer::Renderer(Kernels & _kernels)
     return;
   }
 
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-  SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-  SDL_GL_SetSwapInterval(1); // V-Sync
+  // 3.1 Needed for immediate mode (glBegin/End) rendering
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
   __context = SDL_GL_CreateContext(__window);
   if(__context == nullptr) {
@@ -38,35 +39,74 @@ Renderer::Renderer(Kernels & _kernels)
     return;
   }
 
+  SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+  SDL_GL_SetSwapInterval(0); // V-Sync off for max speed
+
   std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
 
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
   glEnable(GL_TEXTURE_2D);
+  glEnable(GL_BLEND); // Need blending for text overlay
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  // Generate Render Texture
-  glGenTextures(1, &__renderTex);
-  glBindTexture(GL_TEXTURE_2D, __renderTex); {
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  // Generate visualisation render texture
+  glGenTextures(1, &__visTexture);
+  glBindTexture(GL_TEXTURE_2D, __visTexture); {
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _kernels.__dims.x, _kernels.__dims.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   // Register texture as surface reference (can't write to texture directly)
-  checkCudaErrors(cudaGraphicsGLRegisterImage(&__renderTexSurface, __renderTex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+  checkCudaErrors(cudaGraphicsGLRegisterImage(&__visSurface, __visTexture, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+
+  if(TTF_Init() < 0) {
+    std::cout << TTF_GetError() << std::endl;
+    return;
+  }
+
+  __font = TTF_OpenFont("FreeSans.ttf", 24);
+  if (__font == nullptr) {
+    std::cout << "Missing Font" << std::endl;
+    return;
+  }
+
+  glGenTextures(1, &__textTexture);
+  setText("");
 }
 
 Renderer::~Renderer() {
+  TTF_Quit();
+  //TTF_CloseFont(font);
+  SDL_FreeSurface(__textSurface);
   SDL_GL_DeleteContext(__context);
   SDL_DestroyWindow(__window);
   SDL_Quit();
 }
 
+void Renderer::setText(char const * _val) {
+  if(*_val == 0) {
+    // empty string -> 0 x 0 texture -> seg fault
+    _val = " ";
+  }
+  SDL_FreeSurface(__textSurface);
+  SDL_Color color = {255, 255, 255, 0}; // Red
+  __textSurface = TTF_RenderText_Blended_Wrapped(__font, _val, color, 640);
+  glBindTexture(GL_TEXTURE_2D, __textTexture); {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, __textSurface->w, __textSurface->h, 0, GL_BGRA, GL_UNSIGNED_BYTE, __textSurface->pixels);
+  } glBindTexture(GL_TEXTURE_2D, 0);
+}
+
 void Renderer::render(float _mag, float2 _off) {
-  glBindTexture(GL_TEXTURE_2D, __renderTex); {
+  glBindTexture(GL_TEXTURE_2D, __visTexture); {
       glBegin(GL_QUADS); {
         auto vf = [_mag, _off](float u, float v) {
-          float2 vertex = (make_float2(u, v) * 2.0f - make_float2(1.0f)) * _mag + _off;
+          float2 vertex = (make_float2(u, 1.0f - v) * 2.0f - make_float2(1.0f)) * _mag + _off;
           glTexCoord2f(u, v);
           glVertex2f(vertex.x, vertex.y);
         };
@@ -78,7 +118,17 @@ void Renderer::render(float _mag, float2 _off) {
       glEnd();
   } glBindTexture(GL_TEXTURE_2D, 0);
 
-  glFinish();
+  glBindTexture(GL_TEXTURE_2D, __textTexture); {
+    float x_prop = static_cast<float>(__textSurface->w) / __kernels.__dims.x;
+    float y_prop = static_cast<float>(__textSurface->h) / __kernels.__dims.y;
+    glBegin(GL_QUADS); {
+      glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, 1.0f);
+      glTexCoord2f(1.0f, 0.0f); glVertex2f(-1.0f + 2.f * x_prop, 1.0f);
+      glTexCoord2f(1.0f, 1.0f); glVertex2f(-1.0f + 2.f * x_prop, 1.0f - 2.f * y_prop);
+      glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f, 1.0f - 2.f * y_prop);
+    }
+    glEnd();
+  } glBindTexture(GL_TEXTURE_2D, 0);
 
   SDL_GL_SwapWindow(__window);
 }
@@ -86,9 +136,9 @@ void Renderer::render(float _mag, float2 _off) {
 void Renderer::ReportFailure() const {std::cout << SDL_GetError() << std::endl;}
 
 void Renderer::copyToSurface(float2 * _array, float _mul) {
-  checkCudaErrors(cudaGraphicsMapResources(1, &__renderTexSurface)); {
+  checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
     cudaArray_t writeArray;
-    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0));
+    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __visSurface, 0, 0));
     cudaResourceDesc wdsc;
     wdsc.resType = cudaResourceTypeArray;
     wdsc.res.array.array = writeArray;
@@ -96,15 +146,15 @@ void Renderer::copyToSurface(float2 * _array, float _mul) {
     checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
     __kernels.hsv2rgba(writeSurface, _array, _mul);
     checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
-  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__renderTexSurface));
+  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__visSurface));
 
-  checkCudaErrors(cudaStreamSynchronize(0));
+  //checkCudaErrors(cudaStreamSynchronize(0));
 }
 
 void Renderer::copyToSurface(float * _array, float _mul) {
-  checkCudaErrors(cudaGraphicsMapResources(1, &__renderTexSurface)); {
+  checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
     cudaArray_t writeArray;
-    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0));
+    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __visSurface, 0, 0));
     cudaResourceDesc wdsc;
     wdsc.resType = cudaResourceTypeArray;
     wdsc.res.array.array = writeArray;
@@ -112,7 +162,7 @@ void Renderer::copyToSurface(float * _array, float _mul) {
     checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
     __kernels.v2rgba(writeSurface, _array, _mul);
     checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
-  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__renderTexSurface));
+  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__visSurface));
 
-  checkCudaErrors(cudaStreamSynchronize(0));
+  //checkCudaErrors(cudaStreamSynchronize(0));
 }

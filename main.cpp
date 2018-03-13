@@ -2,12 +2,13 @@
 #include <cuda_runtime.h>
 #include <SDL2/SDL_opengl.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 
 #include <algorithm>
 #include <iostream>
 #include <vector>
+#include <iomanip>
 
-#include "configuration.cuh"
 #include "helper_math.h"
 #include "interface.hpp"
 #include "kernels.cuh"
@@ -17,6 +18,11 @@
 
 void quit(int _code, char const * _message);
 
+static int2 const RESOLUTION = make_int2(1280, 720);
+static int const BUFFER = 1u;
+float2 const LENGTH = {1.6f, 0.9f};
+float const FRAME_RATE = 60.0f;
+
 enum Mode : int {
   velocity = 0,
   divergence,
@@ -24,14 +30,13 @@ enum Mode : int {
 };
 
 int main(int argc, char * argv[]) {
-  Kernels kernels(RESOLUTION, BUFFER, BLOCK_SIZE);
-  Renderer renderer(kernels);
+  Kernels kernels(RESOLUTION, BUFFER);
   Simulation sim(kernels);
+  Renderer renderer(kernels);
 
   float init_velocity = 1.0f;
   sim.applyBoundary(init_velocity);
 
-  Uint32 time = SDL_GetTicks();
   SDL_Event event;
 
   std::vector<OptionBase*> options;
@@ -54,7 +59,9 @@ int main(int argc, char * argv[]) {
   options.push_back(&mode);
 
   float velocity_multiplier = 1.0f;
-
+  float fps_max = 0.0f;
+  float fps_act = 0.0f;
+  Uint32 time = SDL_GetTicks();
   bool stop = false;
   while(true) {
     while(SDL_PollEvent(&event)) {
@@ -77,14 +84,23 @@ int main(int argc, char * argv[]) {
       case Mode::pressure: renderer.copyToSurface(sim.__pressure, 50.0f * vis_multiplier); break;
     }
 
+    std::stringstream os_text;
+    os_text.setf(std::ios::fixed, std:: ios::floatfield);
+    os_text.precision(2);
+
+    os_text << "fps: " << floorf(fps_act * 10.f) / 10.f << " (" << floorf(fps_max * 10.f) / 10.f << ")";
+
+    renderer.setText(os_text.str().c_str());
     float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     renderer.render(magnification, offset);
+
 
     float2 const dx = make_float2(LENGTH.x / kernels.__dims.x, LENGTH.y / kernels.__dims.y);
     sim.step(dx, 1.0f / FRAME_RATE);
 
-    int elasped = SDL_GetTicks() - time;
-    SDL_Delay(std::max(1000 / FRAME_RATE - elasped, 0.0f));
+    fps_max = 0.99f * fps_max + 0.01f * (1000.f / (SDL_GetTicks() - time));
+    SDL_Delay(std::max(1000.0f / FRAME_RATE - (SDL_GetTicks() - time), 0.0f));
+    fps_act = 0.99f * fps_act + 0.01f * (1000.f / (SDL_GetTicks() - time));
     time = SDL_GetTicks();
   }
 
@@ -94,6 +110,6 @@ int main(int argc, char * argv[]) {
 
 void quit(int _code, char const * _message) {
   SDL_Quit();
-  std::cout << _message;
+  std::cout << _message << std::endl;
   exit(_code);
 }

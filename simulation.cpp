@@ -2,7 +2,6 @@
 
 #include "helper_math.h"
 #include "kernels.cuh"
-#include "configuration.cuh"
 
 int const PRESSURE_SOLVER_STEPS = 100;
 

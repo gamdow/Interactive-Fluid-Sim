@@ -2,13 +2,9 @@
 
 #include <cuda_runtime.h>
 
-#include <stdio.h>
-#include "configuration.cuh"
-
-
-
+// Wrapper for the simulation kernels that ensures the necessary CUDA resources are available and all the dimensions are consistent.
 struct Kernels {
-  Kernels(int2 _dimensions, int _buffer, dim3 _block_size);
+  Kernels(int2 _dimensions, int _buffer);
   virtual ~Kernels();
   void advectVelocity(float2 * io_velocity, float2 _rdx, float _dt);
   void calcDivergence(float * o_divergence, float2 * _velocity, float * _fluid, float2 _r2dx);
@@ -24,6 +20,7 @@ struct Kernels {
 private:
   void reportCapability() const;
   void optimiseBlockSize(int2 _dims, int _buffer);
+  void initTextureObject();
   dim3 __block, __grid;
   float2 * __tex_buffer;
   size_t __tex_pitch;

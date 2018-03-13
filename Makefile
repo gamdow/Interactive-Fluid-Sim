@@ -7,7 +7,7 @@ OBJS = $(patsubst %.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst %.cpp,$(BUILDDIR)/%
 CC = nvcc
 CXX = nvcc
 NVCC_INCS = -I/usr/include/SDL2
-NVCC_LIBS = -lSDL2 -lGLEW -lGL
+NVCC_LIBS = -lSDL2 -lSDL2_ttf -lGLEW -lGL 
 
 go: clean $(BUILDDIR)/run
 	$(BUILDDIR)/run

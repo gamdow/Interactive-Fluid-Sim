@@ -8,8 +8,7 @@
 #include <vector>
 
 #include "helper_math.h"
-#include "kernels.cuh"
-#include "simulation.cuh"
+#include "simulation.hpp"
 #include "memory.hpp"
 #include "interface.hpp"
 #include "render.hpp"
@@ -26,55 +25,12 @@ enum Mode : int {
 };
 
 int main(int argc, char * argv[]) {
-  Renderer renderer(RESOLUTION);
-
-  int2 const BUFFERED_DIMS = {RESOLUTION.x + 2, RESOLUTION.y + 2};
-  int const BUFFERED_SIZE = BUFFERED_DIMS.x * BUFFERED_DIMS.y;
-
-  MirroredArray<float2> velocity(BUFFERED_SIZE);
-  MirroredArray<float> fluidCells(BUFFERED_SIZE);
-
-  float * divergence = NULL; cudaMalloc((void **) & divergence, BUFFERED_SIZE * sizeof(float)); cudaMemset(divergence, 0, BUFFERED_SIZE * sizeof(float));
-  float * pressure = NULL; cudaMalloc((void **) & pressure, BUFFERED_SIZE * sizeof(float)); cudaMemset(pressure, 0, BUFFERED_SIZE * sizeof(float));
-  float * buffer = NULL; cudaMalloc((void **) & buffer, BUFFERED_SIZE * sizeof(float)); cudaMemset(buffer, 0, BUFFERED_SIZE * sizeof(float));
-
-  for(int i = 0; i < BUFFERED_DIMS.x; ++i) {
-    for(int j = 0; j < BUFFERED_DIMS.y; ++j) {
-      fluidCells[i + j * BUFFERED_DIMS.x] = 1.0f;
-    }
-  }
-
-  // for(int k = 0; k < 5; ++k) {
-  //   for(int l = 0; l < 3; ++l) {
-  //     float2 center = make_float2(k * 80 + 100 + 50 * ((l + 1) % 2), l * 70 + 120);
-  //     for(int i = 0; i < BUFFERED_DIMS.x; ++i) {
-  //       for(int j = 0; j < BUFFERED_DIMS.y; ++j) {
-  //         if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 1000) {
-  //           fluidCells[i + j * BUFFERED_DIMS.x] = 0.0f;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
-  for(int k = 0; k < 5; ++k) {
-    int odd = k % 2;
-    for(int l = 0; l < 3 + odd; ++l) {
-      float2 center = make_float2(k * 80 + 200, l * 80 + 100 - 40 * odd);
-      for(int i = 0; i < BUFFERED_DIMS.x; ++i) {
-        for(int j = 0; j < BUFFERED_DIMS.y; ++j) {
-          if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 1000) {
-            fluidCells[i + j * BUFFERED_DIMS.x] = 0.0f;
-          }
-        }
-      }
-    }
-  }
+  Renderer renderer(RESOLUTION, BUFFER, BLOCK_SIZE);
+  Simulation sim(RESOLUTION, BUFFER, BLOCK_SIZE);
 
   float init_velocity = 1.0f;
-  applyBoundary(BUFFERED_DIMS, init_velocity, velocity, fluidCells);
+  sim.applyBoundary(init_velocity);
 
-  kernels_init(RESOLUTION);
   Uint32 time = SDL_GetTicks();
   SDL_Event event;
 
@@ -117,25 +73,22 @@ int main(int argc, char * argv[]) {
 
     float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     switch(mode) {
-      case Mode::velocity: renderer.render(velocity.device, 0.25f * vis_multiplier, magnification, offset); break;
-      case Mode::divergence: renderer.render(divergence, 0.1f * vis_multiplier, magnification, offset); break;
-      case Mode::pressure: renderer.render(pressure, 50.0f * vis_multiplier, magnification, offset); break;
+      case Mode::velocity: renderer.copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
+      case Mode::divergence: renderer.copyToSurface(sim.__divergence, 0.1f * vis_multiplier); break;
+      case Mode::pressure: renderer.copyToSurface(sim.__pressure, 50.0f * vis_multiplier); break;
     }
+
+    renderer.render(magnification, offset);
 
     float2 const dx = make_float2(LENGTH.x / RESOLUTION.x, LENGTH.y / RESOLUTION.y);
 
-    int2 rest = {RESOLUTION.x, RESOLUTION.y};
-    simulation_step(rest, dx, 1.0f / FRAME_RATE, fluidCells.device, velocity.device, divergence, pressure, buffer);
+    sim.step(dx, 1.0f / FRAME_RATE);
 
     int elasped = SDL_GetTicks() - time;
     SDL_Delay(std::max(1000 / FRAME_RATE - elasped, 0.0f));
     time = SDL_GetTicks();
   }
-  kernels_shutdown();
 
-  cudaFree(pressure);
-  cudaFree(buffer);
-  cudaFree(divergence);
 
   quit(0, "");
 }
@@ -144,30 +97,4 @@ void quit(int _code, char const * _message) {
   SDL_Quit();
   std::cout << _message;
   exit(_code);
-}
-
-void applyBoundary(int2 _dims, float _vel, MirroredArray<float2> & io_velocity, MirroredArray<float> & io_fluidCells) {
-
-  for(int j = 0; j < _dims.y; ++j) {
-    for(int i = 0; i < 50; ++i) {
-      io_velocity[i + j * _dims.x] = make_float2(_vel, 0.0f);
-    }
-    for(int i = _dims.x - 50; i < _dims.x; ++i) {
-      io_velocity[i + j * _dims.x] = make_float2(_vel, 0.0f);
-    }
-  }
-
-  for(int i = 0; i < _dims.x; ++i) {
-    for(int j = 0; j < 1; ++j) {
-      io_velocity[i + j * _dims.x] = make_float2(0.0f, 0.0f);
-      io_fluidCells[i + j * _dims.x] = 0.0f;
-    }
-    for(int j = _dims.y - 1; j < _dims.y; ++j) {
-      io_velocity[i + j * _dims.x] = make_float2(0.0f, 0.0f);
-      io_fluidCells[i + j * _dims.x] = 0.0f;
-    }
-  }
-
-  io_velocity.copyHostToDevice();
-  io_fluidCells.copyHostToDevice();
 }

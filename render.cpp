@@ -7,8 +7,8 @@
 #include "helper_math.h"
 #include "kernels.cuh"
 
-Renderer::Renderer(int2 _res)
-  : __res(_res)
+Renderer::Renderer(int2 _dimensions, int _buffer, dim3 _block_size)
+  : Kernels(_dimensions, _buffer, _block_size)
   , __window(nullptr)
   , __context(nullptr) {
 
@@ -17,15 +17,15 @@ Renderer::Renderer(int2 _res)
     return;
   }
 
-  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, _res.x, _res.y, SDL_WINDOW_OPENGL);
+  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, _dimensions.x, _dimensions.y, SDL_WINDOW_OPENGL);
   if(__window == nullptr) {
     ReportFailure();
     return;
   }
 
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 5);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
@@ -48,7 +48,7 @@ Renderer::Renderer(int2 _res)
   glBindTexture(GL_TEXTURE_2D, __renderTex); {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _res.x, _res.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _dimensions.x, _dimensions.y, 0, GL_RGBA, GL_FLOAT, nullptr);
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   // Register texture as surface reference (can't write to texture directly)
@@ -61,7 +61,7 @@ Renderer::~Renderer() {
   SDL_Quit();
 }
 
-void Renderer::renderTexture(float _mag, float2 _off) {
+void Renderer::render(float _mag, float2 _off) {
   glBindTexture(GL_TEXTURE_2D, __renderTex); {
       glBegin(GL_QUADS); {
         auto vf = [_mag, _off](float u, float v) {
@@ -83,3 +83,35 @@ void Renderer::renderTexture(float _mag, float2 _off) {
 }
 
 void Renderer::ReportFailure() const {std::cout << SDL_GetError() << std::endl;}
+
+void Renderer::copyToSurface(float2 * _array, float _mul) {
+  cudaGraphicsMapResources(1, &__renderTexSurface); {
+    cudaArray_t writeArray;
+    cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0);
+    cudaResourceDesc wdsc;
+    wdsc.resType = cudaResourceTypeArray;
+    wdsc.res.array.array = writeArray;
+    cudaSurfaceObject_t writeSurface;
+    cudaCreateSurfaceObject(&writeSurface, &wdsc);
+    hsv2rgba(writeSurface, _array, _mul);
+    cudaDestroySurfaceObject(writeSurface);
+  } cudaGraphicsUnmapResources(1, &__renderTexSurface);
+
+  cudaStreamSynchronize(0);
+}
+
+void Renderer::copyToSurface(float * _array, float _mul) {
+  cudaGraphicsMapResources(1, &__renderTexSurface); {
+    cudaArray_t writeArray;
+    cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0);
+    cudaResourceDesc wdsc;
+    wdsc.resType = cudaResourceTypeArray;
+    wdsc.res.array.array = writeArray;
+    cudaSurfaceObject_t writeSurface;
+    cudaCreateSurfaceObject(&writeSurface, &wdsc);
+    v2rgba(writeSurface, _array, _mul);
+    cudaDestroySurfaceObject(writeSurface);
+  } cudaGraphicsUnmapResources(1, &__renderTexSurface);
+
+  cudaStreamSynchronize(0);
+}

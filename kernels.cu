@@ -8,127 +8,109 @@
 
 float const PI = 3.14159265359f;
 
-static cudaArray * velArray = NULL;
-texture<float2, 2> velTex;
+Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size)
+  : __dims(_dims)
+  , __buffer_spec(make_int3(_dims.x + 2 * _buffer, _dims.y + 2 * _buffer, _buffer))
+  , __block(_block_size)
+  , __grid(_dims.x / _block_size.x, _dims.y / _block_size.y)
+{
+  cudaMallocPitch(&__tex_buffer, &__tex_pitch, sizeof(float2) * __buffer_spec.x, __buffer_spec.y);
 
-void kernels_init(int2 _dims) {
-  velTex.filterMode = cudaFilterModeLinear;
-  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float2>();
-  cudaMallocArray(&velArray, &channelDesc, _dims.x + 2, _dims.y + 2);
-  cudaBindTextureToArray(velTex, velArray, channelDesc);
+  cudaResourceDesc resDesc; memset(&resDesc, 0, sizeof(resDesc));
+  resDesc.resType = cudaResourceTypePitch2D;
+  resDesc.res.pitch2D.devPtr = __tex_buffer;
+  resDesc.res.pitch2D.pitchInBytes = __tex_pitch;
+  resDesc.res.pitch2D.width = __buffer_spec.x;
+  resDesc.res.pitch2D.height = __buffer_spec.y;
+  resDesc.res.pitch2D.desc = cudaCreateChannelDesc<float2>();
+
+  cudaTextureDesc texDesc; memset(&texDesc, 0, sizeof(texDesc));
+  texDesc.addressMode[0] = cudaAddressModeWrap;
+  texDesc.addressMode[1] = cudaAddressModeBorder;
+  texDesc.filterMode = cudaFilterModeLinear;
+  texDesc.readMode = cudaReadModeElementType;
+  cudaCreateTextureObject(&__tex_object, &resDesc, &texDesc, nullptr);
 }
 
-void kernels_shutdown() {
-  cudaUnbindTexture(velTex);
-  cudaFreeArray(velArray);
+Kernels::~Kernels() {
+  cudaDestroyTextureObject(__tex_object);
+  cudaFree(__tex_buffer);
 }
 
-void copy_to_vel_texture(float2 * _array, int2 _dims) {
-  cudaMemcpyToArray(velArray, 0, 0, _array, (_dims.x + 2) * (_dims.y + 2) * sizeof(float2), cudaMemcpyDeviceToDevice);
-}
-
-// template<int _NX, int _NY, int _BUFFER>
-// struct IndexHelper {
-//   __device__ __inline__ int x() const {return blockIdx.x * blockDim.x + threadIdx.x + _BUFFER;}
-//   __device__ __inline__ int y() const {return blockIdx.y * blockDim.y + threadIdx.y + _BUFFER;}
-//   __device__ __inline__ int i() const {return (_NX + 2 * _BUFFER) * y() + x());}
-//   __device__ __inline__ int4 stencil() const {return i() + make_int4(1, -1, (_NX + 2 * _BUFFER), -(_NX + 2 * _BUFFER));}
-// };
-
-struct IndexHelper {
-  __device__ IndexHelper(int2 _res, int _buffer)
-    : x(blockIdx.x * blockDim.x + threadIdx.x + _buffer)
-    , y(blockIdx.y * blockDim.y + threadIdx.y + _buffer)
-    , idx((_res.x + 2 * _buffer) * y + x)
-    , stencil(idx + make_int4(1, -1, (_res.x + 2 * _buffer), -(_res.x + 2 * _buffer)))
-    {}
+struct Index {
+  __device__ Index(int3 _buffer_spec)
+    : x(blockIdx.x * blockDim.x + threadIdx.x + _buffer_spec.z)
+    , y(blockIdx.y * blockDim.y + threadIdx.y + _buffer_spec.z)
+    , idx(_buffer_spec.x * y + x)
+  {}
   int x, y, idx;
+};
+
+struct Stencil :public Index {
+  __device__ Stencil(int3 _buffer_spec)
+    : Index(_buffer_spec)
+    , stencil(idx + make_int4(1, -1, _buffer_spec.x, -_buffer_spec.x))
+  {}
   int4 stencil;
 };
 
-
-
-__global__ void advect_velocity(int2 _res, float _dt, float2 _rdx, float2 * o_velocity) {
-  IndexHelper ih(_res, BUFFER);
+__global__ void advect_velocity(float2 * o_velocity, cudaTextureObject_t _velocityObj, int3 _buffer_spec, float _dt, float2 _rdx) {
+  Index ih(_buffer_spec);
   float s = (float)ih.x + 0.5f;
   float t = (float)ih.y + 0.5f;
-  float2 pos = make_float2(s, t) - _dt * _rdx * tex2D(velTex, s, t);
-  o_velocity[ih.idx] = tex2D(velTex, pos.x, pos.y);
+  float2 pos = make_float2(s, t) - _dt * _rdx * tex2D<float2>(_velocityObj, s, t);
+  o_velocity[ih.idx] = tex2D<float2>(_velocityObj, pos.x, pos.y);
 }
 
-__global__ void calc_divergence(float2 * _vel, float * _fluid, int2 _res, float2 _r2dx, float * o_div) {
-  IndexHelper ih(_res, BUFFER);
-  auto stencil = ih.stencil;
-  o_div[ih.idx] = (_vel[stencil.x].x * _fluid[stencil.x] - _vel[stencil.y].x * _fluid[stencil.y]) * _r2dx.x
-    + (_vel[stencil.z].y * _fluid[stencil.z] - _vel[stencil.w].y * _fluid[stencil.w]) * _r2dx.y;
+__global__ void calc_divergence(float * o_divergence, float2 * _velocity, float * _fluid, int3 _buffer_spec, float2 _r2dx) {
+  Stencil ih(_buffer_spec);
+  o_divergence[ih.idx] = (_velocity[ih.stencil.x].x * _fluid[ih.stencil.x] - _velocity[ih.stencil.y].x * _fluid[ih.stencil.y]) * _r2dx.x
+    + (_velocity[ih.stencil.z].y * _fluid[ih.stencil.z] - _velocity[ih.stencil.w].y * _fluid[ih.stencil.w]) * _r2dx.y;
 }
 
-__global__ void pressure_decay(float * _fluid, int2 _res, float * io_pres) {
-
-  IndexHelper ih(_res, BUFFER);
-  io_pres[ih.idx] *= _fluid[ih.idx] * 0.1f + 0.9f;
+__global__ void pressure_decay(float * io_pressure, float * _fluid, int3 _buffer_spec) {
+  Index ih(_buffer_spec);
+  io_pressure[ih.idx] *= _fluid[ih.idx] * 0.1f + 0.9f;
 }
 
-// Ax = b
-__global__ void jacobi_solve(float * _b, float * _validCells, int2 _res, float alpha, float beta, float * _x, float * o_x) {
-
-  IndexHelper ih(_res, BUFFER);
-  auto stencil = ih.stencil;
-
-  float xL = _validCells[stencil.y] > 0 ? _x[stencil.y] : _x[ih.idx];
-  float xR = _validCells[stencil.x] > 0 ? _x[stencil.x] : _x[ih.idx];
-  float xB = _validCells[stencil.w] > 0 ? _x[stencil.w] : _x[ih.idx];
-  float xT = _validCells[stencil.z] > 0 ? _x[stencil.z] : _x[ih.idx];
-
-  o_x[ih.idx] = beta * (xL + xR + xB + xT + alpha * _b[ih.idx]);
+__global__ void pressure_solve(float * o_pressure, float * _pressure, float * _divergence, float * _fluid, int3 _buffer_spec, float2 _dx) {
+  Stencil ih(_buffer_spec);
+  o_pressure[ih.idx] = (1.0f / 4.0f) * (
+    (4.0f - _fluid[ih.stencil.x] - _fluid[ih.stencil.y] - _fluid[ih.stencil.z] - _fluid[ih.stencil.w]) * _pressure[ih.idx]
+    + _fluid[ih.stencil.x] * _pressure[ih.stencil.x]
+    + _fluid[ih.stencil.y] * _pressure[ih.stencil.y]
+    + _fluid[ih.stencil.z] * _pressure[ih.stencil.z]
+    + _fluid[ih.stencil.w] * _pressure[ih.stencil.w]
+    - _divergence[ih.idx] * _dx.x * _dx.y);
 }
 
-__global__ void pressure_solve(float * _div, float * _fluid, int2 _res, float2 _dx, float * i_pres, float * o_pres) {
-IndexHelper ih(_res, BUFFER);
-  auto stencil = ih.stencil;
-  o_pres[ih.idx] = (1.0f / 4.0f) * (
-    (4.0f - _fluid[stencil.x] - _fluid[stencil.y] - _fluid[stencil.z] - _fluid[stencil.w]) * i_pres[ih.idx]
-    + _fluid[stencil.x] * i_pres[stencil.x]
-    + _fluid[stencil.y] * i_pres[stencil.y]
-    + _fluid[stencil.z] * i_pres[stencil.z]
-    + _fluid[stencil.w] * i_pres[stencil.w]
-    - _div[ih.idx] * _dx.x * _dx.y);
+__global__ void sub_gradient(float2 * io_velocity, float * _pressure, float * _fluid, int3 _buffer_spec, float2 _r2dx) {
+  Stencil ih(_buffer_spec);
+  io_velocity[ih.idx] -= _fluid[ih.idx] * _r2dx * make_float2( _pressure[ih.stencil.x] - _pressure[ih.stencil.y], _pressure[ih.stencil.z] - _pressure[ih.stencil.w]);
 }
 
-__global__ void sub_gradient(float * _pressure, float * _fluid, int2 _res, float2 _r2dx, float2 * io_velocity) {
-IndexHelper ih(_res, BUFFER);
-  auto stencil = ih.stencil;
-  io_velocity[ih.idx] -= _fluid[ih.idx] * _r2dx * make_float2( _pressure[stencil.x] - _pressure[stencil.y], _pressure[stencil.z] - _pressure[stencil.w]);
-}
-
-__global__ void enforce_slip(float * _fluid, int2 _res, float2 * io_velocity) {
-
-  IndexHelper ih(_res, BUFFER);
-  auto stencil = ih.stencil;
+__global__ void enforce_slip(float2 * io_velocity, float * _fluid, int3 _buffer_spec) {
+  Stencil ih(_buffer_spec);
   if(_fluid[ih.idx] > 0.0f) {
-    float xvel = _fluid[stencil.x] == 0.0f ? io_velocity[stencil.x].x :
-      _fluid[stencil.y] == 0.0f ? io_velocity[stencil.y].x : io_velocity[ih.idx].x;
-    float yvel = _fluid[stencil.z] == 0.0f ? io_velocity[stencil.z].y :
-    _fluid[stencil.w] == 0.0f ? io_velocity[stencil.w].y : io_velocity[ih.idx].y;
+    float xvel = _fluid[ih.stencil.x] == 0.0f ? io_velocity[ih.stencil.x].x :
+      _fluid[ih.stencil.y] == 0.0f ? io_velocity[ih.stencil.y].x : io_velocity[ih.idx].x;
+    float yvel = _fluid[ih.stencil.z] == 0.0f ? io_velocity[ih.stencil.z].y :
+    _fluid[ih.stencil.w] == 0.0f ? io_velocity[ih.stencil.w].y : io_velocity[ih.idx].y;
     io_velocity[ih.idx] = make_float2(xvel, yvel);
   } else {
     io_velocity[ih.idx] = make_float2(0.0f, 0.0f);
   }
 }
 
-__global__ void hsv_to_rgba(float2 * _array, float _mul, int2 _res, cudaSurfaceObject_t o_surface) {
-
-    IndexHelper ih(_res, BUFFER);
-
+__global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 * _array, float _power, int3 _buffer_spec) {
+  Index ih(_buffer_spec);
   float h = 6.0f * (atan2f(-_array[ih.idx].x, -_array[ih.idx].y) / (2 * PI) + 0.5);
-  float v = powf(_array[ih.idx].x * _array[ih.idx].x + _array[ih.idx].y * _array[ih.idx].y, _mul);
+  float v = powf(_array[ih.idx].x * _array[ih.idx].x + _array[ih.idx].y * _array[ih.idx].y, _power);
   float hi = floorf(h);
   float f = h - hi;
   float q = v * (1 - f);
   float t = v * f;
-
   float4 rgb = {.0f, .0f, .0f, 1.0f};
-
   if(hi == 0.0f || hi == 6.0f) {
     rgb.x = v;
     rgb.y = t;
@@ -148,15 +130,56 @@ __global__ void hsv_to_rgba(float2 * _array, float _mul, int2 _res, cudaSurfaceO
     rgb.x = v;
     rgb.z = q;
   }
-
-  surf2Dwrite(rgb, o_surface, (ih.x - BUFFER) * sizeof(float4), (ih.y - BUFFER));
+  surf2Dwrite(rgb, o_surface, (ih.x - _buffer_spec.z) * sizeof(float4), (ih.y - _buffer_spec.z));
 }
 
-__global__ void d_to_rgba(float * _array, float _mul, int2 _res, cudaSurfaceObject_t o_surface) {
-
-    IndexHelper ih(_res, BUFFER);
+__global__ void d_to_rgba(cudaSurfaceObject_t o_surface, float * _array, float _multiplier, int3 _buffer_spec) {
+  Index ih(_buffer_spec);
   float pos = (_array[ih.idx] + abs(_array[ih.idx])) / 2.0f;
   float neg = -(_array[ih.idx] - abs(_array[ih.idx])) / 2.0f;
-  float4 rgb = make_float4(neg * _mul, pos * _mul, 0.0, 1.0f);
-  surf2Dwrite(rgb, o_surface, (ih.x - BUFFER) * sizeof(float4), (ih.y - BUFFER));
+  float4 rgb = make_float4(neg * _multiplier, pos * _multiplier, 0.0, 1.0f);
+  surf2Dwrite(rgb, o_surface, (ih.x - _buffer_spec.z) * sizeof(float4), (ih.y - _buffer_spec.z));
+}
+
+void Kernels::advectVelocity(float2 * io_velocity, float2 _rdx, float _dt) {
+  cudaMemcpy2D(__tex_buffer, __tex_pitch, io_velocity, sizeof(float2) * __buffer_spec.x, sizeof(float2) * __buffer_spec.x, __buffer_spec.y, cudaMemcpyHostToDevice);
+  advect_velocity<<<__grid,__block>>>(io_velocity, __tex_object, __buffer_spec, _dt, _rdx);
+}
+
+void Kernels::calcDivergence(float * o_divergence, float2 * _velocity, float * _fluid, float2 _r2dx) {
+  calc_divergence<<<__grid,__block>>>(o_divergence, _velocity, _fluid, __buffer_spec, _r2dx);
+}
+
+void Kernels::pressureDecay(float * io_pressure, float * _fluid) {
+  pressure_decay<<<__grid,__block>>>(io_pressure, _fluid, __buffer_spec);
+}
+
+void Kernels::pressureSolve(float * o_pressure, float * _pressure, float * _divergence, float * _fluid, float2 _dx) {
+  pressure_solve<<<__grid,__block>>>(o_pressure, _pressure, _divergence, _fluid, __buffer_spec, _dx);
+}
+
+void Kernels::subGradient(float2 * io_velocity, float * _pressure, float * _fluid, float2 _r2dx) {
+  sub_gradient<<<__grid,__block>>>(io_velocity, _pressure, _fluid, __buffer_spec, _r2dx);
+}
+
+void Kernels::enforceSlip(float2 * io_velocity, float * _fluid) {
+  enforce_slip<<<__grid,__block>>>(io_velocity, _fluid, __buffer_spec);
+}
+
+void Kernels::hsv2rgba(cudaSurfaceObject_t o_surface, float2 * _array, float _power) {
+  hsv_to_rgba<<<__grid,__block>>>(o_surface, _array, _power, __buffer_spec);
+}
+
+void Kernels::v2rgba(cudaSurfaceObject_t o_surface, float * _array, float _multiplier) {
+  d_to_rgba<<<__grid,__block>>>(o_surface, _array, _multiplier, __buffer_spec);
+}
+
+// Ax = b
+__global__ void jacobi_solve(float * _b, float * _validCells, int3 _buffer_spec, float alpha, float beta, float * _x, float * o_x) {
+  Stencil ih(_buffer_spec);
+  float xL = _validCells[ih.stencil.y] > 0 ? _x[ih.stencil.y] : _x[ih.idx];
+  float xR = _validCells[ih.stencil.x] > 0 ? _x[ih.stencil.x] : _x[ih.idx];
+  float xB = _validCells[ih.stencil.w] > 0 ? _x[ih.stencil.w] : _x[ih.idx];
+  float xT = _validCells[ih.stencil.z] > 0 ? _x[ih.stencil.z] : _x[ih.idx];
+  o_x[ih.idx] = beta * (xL + xR + xB + xT + alpha * _b[ih.idx]);
 }

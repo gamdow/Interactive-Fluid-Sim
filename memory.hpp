@@ -1,13 +1,20 @@
 #pragma once
 
+#include <cstring>
+
 // Class of managing data mirrored in host and device memory
 template<class T>
 struct MirroredArray {
+  MirroredArray()
+    : size(0)
+    , host(nullptr)
+    , device(nullptr)
+  {}
   MirroredArray(int _size)
-      : size(_size)
+    : size(_size)
   {
     host = new T [size];
-    memset(host, 0, size * sizeof(T));
+    //std::memset(host, 0, size * sizeof(host[0]));
     cudaMalloc((void **) & device, size * sizeof(T));
     cudaMemset(device, 0, size * sizeof(T));
   }

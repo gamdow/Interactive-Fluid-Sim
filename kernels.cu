@@ -1,21 +1,35 @@
 #include "kernels.cuh"
 
 #include "helper_math.h"
+#include "helper_cuda.h"
 #include "utility.hpp"
 #include "configuration.cuh"
 
 #include <stdio.h>
+#include <iostream>
 
 float const PI = 3.14159265359f;
 
-Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size)
-  : __dims(_dims)
-  , __buffer_spec(make_int3(_dims.x + 2 * _buffer, _dims.y + 2 * _buffer, _buffer))
-  , __block(_block_size)
-  , __grid(_dims.x / _block_size.x, _dims.y / _block_size.y)
-{
-  cudaMallocPitch(&__tex_buffer, &__tex_pitch, sizeof(float2) * __buffer_spec.x, __buffer_spec.y);
+__global__ void advect_velocity(float2 * o_velocity, cudaTextureObject_t _velocityObj, int3 _buffer_spec, float _dt, float2 _rdx);
+__global__ void calc_divergence(float * o_divergence, float2 * _velocity, float * _fluid, int3 _buffer_spec, float2 _r2dx);
+__global__ void pressure_decay(float * io_pressure, float * _fluid, int3 _buffer_spec);
+__global__ void pressure_solve(float * o_pressure, float * _pressure, float * _divergence, float * _fluid, int3 _buffer_spec, float2 _dx);
+__global__ void sub_gradient(float2 * io_velocity, float * _pressure, float * _fluid, int3 _buffer_spec, float2 _r2dx);
+__global__ void enforce_slip(float2 * io_velocity, float * _fluid, int3 _buffer_spec);
+__global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 * _array, float _power, int3 _buffer_spec);
+__global__ void d_to_rgba(cudaSurfaceObject_t o_surface, float * _array, float _multiplier, int3 _buffer_spec);
 
+
+
+Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size) {
+  std::cout << std::endl;
+  reportCapability();
+  std::cout << std::endl;
+  optimiseBlockSize(_dims, _buffer);
+  std::cout << std::endl;
+
+
+  checkCudaErrors(cudaMallocPitch(&__tex_buffer, &__tex_pitch, sizeof(float2) * __buffer_spec.x, __buffer_spec.y));
   cudaResourceDesc resDesc; memset(&resDesc, 0, sizeof(resDesc));
   resDesc.resType = cudaResourceTypePitch2D;
   resDesc.res.pitch2D.devPtr = __tex_buffer;
@@ -23,18 +37,48 @@ Kernels::Kernels(int2 _dims, int _buffer, dim3 _block_size)
   resDesc.res.pitch2D.width = __buffer_spec.x;
   resDesc.res.pitch2D.height = __buffer_spec.y;
   resDesc.res.pitch2D.desc = cudaCreateChannelDesc<float2>();
-
   cudaTextureDesc texDesc; memset(&texDesc, 0, sizeof(texDesc));
   texDesc.addressMode[0] = cudaAddressModeWrap;
   texDesc.addressMode[1] = cudaAddressModeBorder;
   texDesc.filterMode = cudaFilterModeLinear;
   texDesc.readMode = cudaReadModeElementType;
-  cudaCreateTextureObject(&__tex_object, &resDesc, &texDesc, nullptr);
+  checkCudaErrors(cudaCreateTextureObject(&__tex_object, &resDesc, &texDesc, nullptr));
 }
 
 Kernels::~Kernels() {
-  cudaDestroyTextureObject(__tex_object);
-  cudaFree(__tex_buffer);
+  checkCudaErrors(cudaDestroyTextureObject(__tex_object));
+  checkCudaErrors(cudaFree(__tex_buffer));
+}
+
+void Kernels::reportCapability() const {
+  int deviceCount = 0;
+  cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
+
+  for(int dev = 0; dev < deviceCount; ++dev) {
+    cudaDeviceProp deviceProp;
+    cudaGetDeviceProperties(&deviceProp, dev);
+
+    std::cout << "CUDA Device: " << dev << ":" << deviceProp.name << std::endl;
+
+    int driverVersion = 0, runtimeVersion = 0;
+    cudaDriverGetVersion(&driverVersion);
+    cudaRuntimeGetVersion(&runtimeVersion);
+    std::cout << "\tRuntime/Driver: " << runtimeVersion << "/" << driverVersion << std::endl;
+    std::cout << "\tCapability Major.Minor: " << deviceProp.major << "." << deviceProp.minor << std::endl;
+  }
+}
+
+void Kernels::optimiseBlockSize(int2 _dims, int _buffer) {
+  std::cout << "Desired Resolution: " << _dims.x << " x " << _dims.y << std::endl;
+  int N = _dims.x * _dims.y;
+  int blockSize, minGridSize;   cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, pressure_solve, 0, N);
+  __block = dim3(32, blockSize / 32);
+  std::cout << "Optimal Block: " << __block.x << " x " << __block.y << std::endl;
+  __grid = dim3(_dims.x / __block.x, _dims.y / __block.y);
+  __dims = make_int2(__grid.x * __block.x, __grid.y * __block.y);
+  std::cout << "Adjusted Resolution: " << __dims.x << " x " << __dims.y << std::endl;
+  __buffer_spec = make_int3(__dims.x + 2 * _buffer, __dims.y + 2 * _buffer, _buffer);
+  __buffered_size = __buffer_spec.x * __buffer_spec.y;
 }
 
 struct Index {

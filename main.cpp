@@ -80,7 +80,7 @@ int main(int argc, char * argv[]) {
     float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     renderer.render(magnification, offset);
 
-    float2 const dx = make_float2(LENGTH.x / RESOLUTION.x, LENGTH.y / RESOLUTION.y);
+    float2 const dx = make_float2(LENGTH.x / kernels.__dims.x, LENGTH.y / kernels.__dims.y);
     sim.step(dx, 1.0f / FRAME_RATE);
 
     int elasped = SDL_GetTicks() - time;

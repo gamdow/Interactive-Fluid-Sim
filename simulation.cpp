@@ -8,14 +8,13 @@ int const PRESSURE_SOLVER_STEPS = 100;
 
 Simulation::Simulation(Kernels & _kernels)
   : __kernels(_kernels)
-  , __buffered_size(_kernels.__buffer_spec.x * _kernels.__buffer_spec.y)
-  , __velocity(__buffered_size)
-  , __fluidCells(__buffered_size)
+  , __velocity(_kernels.__buffered_size)
+  , __fluidCells(_kernels.__buffered_size)
 {
-  size_t buffer_bytes = __buffered_size * sizeof(float);
-  cudaMalloc((void **) & __divergence, buffer_bytes); cudaMemset(__divergence, 0, buffer_bytes);
-  cudaMalloc((void **) & __pressure, buffer_bytes); cudaMemset(__pressure, 0, buffer_bytes);
-  cudaMalloc((void **) & __buffer, buffer_bytes); cudaMemset(__buffer, 0, buffer_bytes);
+  size_t buffer_bytes = _kernels.__buffered_size * sizeof(float);
+  checkCudaErrors(cudaMalloc((void **) & __divergence, buffer_bytes)); checkCudaErrors(cudaMemset(__divergence, 0, buffer_bytes));
+  checkCudaErrors(cudaMalloc((void **) & __pressure, buffer_bytes)); checkCudaErrors(cudaMemset(__pressure, 0, buffer_bytes));
+  checkCudaErrors(cudaMalloc((void **) & __buffer, buffer_bytes)); checkCudaErrors(cudaMemset(__buffer, 0, buffer_bytes));
 
   for(int i = 0; i < _kernels.__buffer_spec.x; ++i) {
     for(int j = 0; j < _kernels.__buffer_spec.y; ++j) {

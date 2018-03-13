@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include "configuration.cuh"
 
+
+
 struct Kernels {
   Kernels(int2 _dimensions, int _buffer, dim3 _block_size);
   virtual ~Kernels();
@@ -18,7 +20,10 @@ struct Kernels {
   void v2rgba(cudaSurfaceObject_t o_surface, float * _array, float _mul);
   int2 __dims;
   int3 __buffer_spec;
+  int __buffered_size;
 private:
+  void reportCapability() const;
+  void optimiseBlockSize(int2 _dims, int _buffer);
   dim3 __block, __grid;
   float2 * __tex_buffer;
   size_t __tex_pitch;

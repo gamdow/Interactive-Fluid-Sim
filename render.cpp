@@ -5,6 +5,7 @@
 #include <cuda_gl_interop.h>
 
 #include "helper_math.h"
+#include "helper_cuda.h"
 #include "kernels.cuh"
 
 Renderer::Renderer(Kernels & _kernels)
@@ -37,7 +38,7 @@ Renderer::Renderer(Kernels & _kernels)
     return;
   }
 
-  std::cout << glGetString(GL_VERSION) << std::endl;
+  std::cout << "OpenGL: " << glGetString(GL_VERSION) << std::endl;
 
   glDisable(GL_DEPTH_TEST);
   glDisable(GL_CULL_FACE);
@@ -52,7 +53,7 @@ Renderer::Renderer(Kernels & _kernels)
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   // Register texture as surface reference (can't write to texture directly)
-  cudaGraphicsGLRegisterImage(&__renderTexSurface, __renderTex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore);
+  checkCudaErrors(cudaGraphicsGLRegisterImage(&__renderTexSurface, __renderTex, GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
 }
 
 Renderer::~Renderer() {
@@ -85,33 +86,33 @@ void Renderer::render(float _mag, float2 _off) {
 void Renderer::ReportFailure() const {std::cout << SDL_GetError() << std::endl;}
 
 void Renderer::copyToSurface(float2 * _array, float _mul) {
-  cudaGraphicsMapResources(1, &__renderTexSurface); {
+  checkCudaErrors(cudaGraphicsMapResources(1, &__renderTexSurface)); {
     cudaArray_t writeArray;
-    cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0);
+    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0));
     cudaResourceDesc wdsc;
     wdsc.resType = cudaResourceTypeArray;
     wdsc.res.array.array = writeArray;
     cudaSurfaceObject_t writeSurface;
-    cudaCreateSurfaceObject(&writeSurface, &wdsc);
+    checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
     __kernels.hsv2rgba(writeSurface, _array, _mul);
-    cudaDestroySurfaceObject(writeSurface);
-  } cudaGraphicsUnmapResources(1, &__renderTexSurface);
+    checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
+  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__renderTexSurface));
 
-  cudaStreamSynchronize(0);
+  checkCudaErrors(cudaStreamSynchronize(0));
 }
 
 void Renderer::copyToSurface(float * _array, float _mul) {
-  cudaGraphicsMapResources(1, &__renderTexSurface); {
+  checkCudaErrors(cudaGraphicsMapResources(1, &__renderTexSurface)); {
     cudaArray_t writeArray;
-    cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0);
+    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __renderTexSurface, 0, 0));
     cudaResourceDesc wdsc;
     wdsc.resType = cudaResourceTypeArray;
     wdsc.res.array.array = writeArray;
     cudaSurfaceObject_t writeSurface;
-    cudaCreateSurfaceObject(&writeSurface, &wdsc);
+    checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
     __kernels.v2rgba(writeSurface, _array, _mul);
-    cudaDestroySurfaceObject(writeSurface);
-  } cudaGraphicsUnmapResources(1, &__renderTexSurface);
+    checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
+  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__renderTexSurface));
 
-  cudaStreamSynchronize(0);
+  checkCudaErrors(cudaStreamSynchronize(0));
 }

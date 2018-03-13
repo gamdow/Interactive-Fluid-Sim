@@ -2,6 +2,9 @@
 
 #include <cstring>
 #include <cuda_runtime.h>
+#include "helper_cuda.h"
+
+#include <iostream>
 
 // Class of managing data mirrored in host and device memory
 template<class T>
@@ -18,18 +21,18 @@ struct MirroredArray {
   {
     host = new T [size];
     std::memset(host, 0, size * sizeof(T));
-    cudaMalloc((void **) & device, size * sizeof(T));
-    cudaMemset(device, 0, size * sizeof(T));
+    checkCudaErrors(cudaMalloc((void **) & device, size * sizeof(T)));
+    checkCudaErrors(cudaMemset(device, 0, size * sizeof(T)));
   }
   ~MirroredArray() {
     delete [] host;
-    cudaFree(device);
+    checkCudaErrors(cudaFree(device));
   }
   T & operator[](int i) {
     return host[i];
   }
   void copyHostToDevice() {
-    cudaMemcpy(device, host, size * sizeof(T), cudaMemcpyHostToDevice);
+    checkCudaErrors(cudaMemcpy(device, host, size * sizeof(T), cudaMemcpyHostToDevice));
   }
   int size;
   T * host;

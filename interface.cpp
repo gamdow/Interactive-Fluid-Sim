@@ -1,6 +1,36 @@
 #include "interface.hpp"
 
-#include <iostream>
+#include <algorithm>
+#include <cmath>
+
+
+FPS::FPS(float _frame_rate)
+  : __frame_rate(_frame_rate)
+  , __fps_max(_frame_rate)
+  , __fps_act(_frame_rate)
+  , __time(SDL_GetTicks())
+{}
+
+void FPS::printCurrent(std::ostream & os) const {
+  os << "fps: " << floorf(__fps_act * 10.f) / 10.f << " (" << floorf(__fps_max * 10.f) / 10.f << ")";
+}
+
+void FPS::update() {
+  validate(__fps_max);
+  validate(__fps_act);
+  __fps_max = 0.99f * __fps_max + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
+  SDL_Delay(std::max(1000.0f / __frame_rate - (SDL_GetTicks() - __time), 0.0f));
+  __fps_act = 0.99f * __fps_act + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
+  __time = SDL_GetTicks();
+}
+
+void FPS::validate(float & _val) {
+  if(!std::isfinite(_val)) {
+    _val = __frame_rate;
+  } else {
+    _val = std::min(std::max(_val, 0.0f), 1000.0f);
+  }
+}
 
 OptionBase::OptionBase(char const * _name)
   : __name(_name)

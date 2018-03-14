@@ -20,7 +20,7 @@
 void quit(int _code, char const * _message);
 
 static int2 const RESOLUTION = make_int2(1280, 720);
-static int const BUFFER = 5u;
+static int const BUFFER = 2u;
 float2 const LENGTH = {1.6f, 0.9f};
 float const FRAME_RATE = 60.0f;
 
@@ -31,42 +31,10 @@ enum Mode : int {
   pressure
 };
 
-struct FPS {
-  FPS(float _frame_rate)
-    : __frame_rate(_frame_rate)
-    , __fps_max(_frame_rate)
-    , __fps_act(_frame_rate)
-    , __time(SDL_GetTicks())
-  {}
-  void printCurrent(std::ostream & os) const {
-    os << "fps: " << floorf(__fps_act * 10.f) / 10.f << " (" << floorf(__fps_max * 10.f) / 10.f << ")";
-  }
-  void update() {
-    validate(__fps_max);
-    validate(__fps_act);
-    __fps_max = 0.99f * __fps_max + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
-    SDL_Delay(std::max(1000.0f / __frame_rate - (SDL_GetTicks() - __time), 0.0f));
-    __fps_act = 0.99f * __fps_act + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
-    __time = SDL_GetTicks();
-  }
-private:
-  void validate(float & _val) {
-    if(!std::isfinite(_val)) {
-      _val = __frame_rate;
-    } else {
-      _val = std::min(std::max(_val, 0.0f), 1000.0f);
-    }
-  }
-  float __frame_rate;
-  float __fps_max, __fps_act;
-  Uint32 __time;
-};
-
 int main(int argc, char * argv[]) {
   Kernels kernels(RESOLUTION, BUFFER);
   Simulation sim(kernels);
   Renderer renderer(kernels);
-
 
   SDL_Event event;
 
@@ -93,6 +61,13 @@ int main(int argc, char * argv[]) {
   mode.insert("Pressure", Mode::pressure);
   options.push_back(&mode);
 
+  MirroredArray<float3> color_map(4);
+  color_map[0] = make_float3(1.0f, 0.f, 0.f);
+  color_map[1] = make_float3(0.0f, 1.f, 0.f);
+  color_map[2] = make_float3(0.0f, 0.f, 1.f);
+  color_map[3] = make_float3(0.5f, 0.5f, 0.5f);
+  color_map.copyHostToDevice();
+
   sim.applyBoundary(vel_multiplier);
   FPS fps(FRAME_RATE);
   bool stop = false;
@@ -112,6 +87,9 @@ int main(int argc, char * argv[]) {
             case SDLK_a:
               sim.applyBoundary(vel_multiplier);
               break;
+            case SDLK_q:
+              stop = true;
+              break;
             defaut:
               break;
           }
@@ -126,7 +104,7 @@ int main(int argc, char * argv[]) {
     if(stop) break;
 
     switch(mode) {
-      case Mode::smoke: renderer.copyToSurface(sim.__smoke.device, vis_multiplier); break;
+      case Mode::smoke: renderer.copyToSurface(sim.__smoke.device, color_map.device); break;
       case Mode::velocity: renderer.copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
       case Mode::divergence: renderer.copyToSurface(sim.__divergence.device, 0.1f * vis_multiplier); break;
       case Mode::pressure: renderer.copyToSurface(sim.__pressure.device, 50.0f * vis_multiplier); break;

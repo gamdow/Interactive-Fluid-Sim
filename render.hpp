@@ -16,6 +16,7 @@ struct Renderer {
   void render(float _mag, float2 _off);
   void copyToSurface(float * _array, float _mul);
   void copyToSurface(float2 * _array, float _mul);
+  void copyToSurface(float4 * _array, float3 const _map[4]);
 private:
   void ReportFailure() const;
   Kernels & __kernels;

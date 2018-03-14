@@ -13,16 +13,14 @@ Simulation::Simulation(Kernels & _kernels)
   , __pressure(_kernels.__buffered_size)
   , __smoke(_kernels.__buffered_size)
 {
-  checkCudaErrors(cudaMalloc((void **) & __f2temp1, _kernels.__buffered_size * sizeof(float2)));
-  checkCudaErrors(cudaMalloc((void **) & __f2temp2, _kernels.__buffered_size * sizeof(float2)));
+  checkCudaErrors(cudaMalloc((void **) & __f2temp, _kernels.__buffered_size * sizeof(float2)));
   checkCudaErrors(cudaMalloc((void **) & __f1temp, _kernels.__buffered_size * sizeof(float)));
   reset();
 }
 
 Simulation::~Simulation() {
   cudaFree(__f1temp);
-  cudaFree(__f2temp1);
-  cudaFree(__f2temp2);
+  cudaFree(__f2temp);
 }
 
 void Simulation::step(float2 _d, float _dt) {
@@ -31,9 +29,9 @@ void Simulation::step(float2 _d, float _dt) {
 
   if(true) {
     // Backwards-Forwards Error Compensation & Correction (BFECC)
-    __kernels.advectVelocity(__f2temp1, __velocity.device, rd, _dt);
-    __kernels.advectVelocity(__f2temp1, rd, -_dt);
-    __kernels.sum(__velocity.device, 1.5f, __velocity.device, -.5f, __f2temp1);
+    __kernels.advectVelocity(__f2temp, __velocity.device, rd, _dt);
+    __kernels.advectVelocity(__f2temp, rd, -_dt);
+    __kernels.sum(__velocity.device, 1.5f, __velocity.device, -.5f, __f2temp);
     __kernels.advectVelocity(__velocity.device, rd, _dt);
   } else {
     __kernels.advectVelocity(__velocity.device, rd, _dt);
@@ -48,7 +46,7 @@ void Simulation::step(float2 _d, float _dt) {
   }
   __kernels.subGradient(__velocity.device, __pressure.device, __fluidCells.device, r2d);
   __kernels.enforceSlip(__velocity.device, __fluidCells.device);
-  __kernels.applyAdvection(__smoke.device, __velocity.device, _dt, rd);
+  __kernels.applyAdvection(__smoke.device, __velocity.device, __fluidCells.device, _dt, rd);
 }
 
 void Simulation::applyBoundary(float _vel) {
@@ -73,6 +71,7 @@ void Simulation::applyBoundary(float _vel) {
   for(int i = 0; i < __kernels.__buffer_spec.x; ++i) {
     for(int j = 0; j < __kernels.__buffer_spec.z; ++j) {
       __fluidCells[i + j * __kernels.__buffer_spec.x] = 0.0f;
+      __velocity[i + j * __kernels.__buffer_spec.x] = make_float2(_vel, 0.f);
     }
     for(int j = __kernels.__buffer_spec.y - __kernels.__buffer_spec.z; j < __kernels.__buffer_spec.y; ++j) {
       __fluidCells[i + j * __kernels.__buffer_spec.x] = 0.0f;
@@ -80,7 +79,7 @@ void Simulation::applyBoundary(float _vel) {
     }
   }
 
-  // __velocity.copyHostToDevice();
+  __velocity.copyHostToDevice();
   __fluidCells.copyHostToDevice();
   __pressure.copyHostToDevice();
 }
@@ -89,14 +88,19 @@ void Simulation::applySmoke() {
   __smoke.copyDeviceToHost();
 
   for(int j = __kernels.__buffer_spec.z; j < __kernels.__buffer_spec.y - __kernels.__buffer_spec.z; ++j) {
-    for(int i = 0; i < __kernels.__buffer_spec.z + 20; ++i) {
-      __smoke[i + j * __kernels.__buffer_spec.x] = 1.0f;
+    for(int i = 0; i < __kernels.__buffer_spec.z + 200; ++i) {
+      int z = (j / 20) % 4;
+      __smoke[i + j * __kernels.__buffer_spec.x] = make_float4(
+        z == 0 ? 1.0f : 0.f,
+        z == 1 ? 1.0f : 0.f,
+        z == 2 ? 1.0f : 0.f,
+        z == 3 ? 1.0f : 0.f
+      );
     }
   }
 
   __smoke.copyHostToDevice();
 }
-
 
 void Simulation::reset() {
   __velocity.reset();
@@ -104,8 +108,7 @@ void Simulation::reset() {
   __divergence.reset();
   __pressure.reset();
   __smoke.reset();
-  checkCudaErrors(cudaMemset(__f2temp1, 0, __kernels.__buffered_size * sizeof(float2)));
-  checkCudaErrors(cudaMemset(__f2temp2, 0, __kernels.__buffered_size * sizeof(float2)));
+  checkCudaErrors(cudaMemset(__f2temp, 0, __kernels.__buffered_size * sizeof(float2)));
   checkCudaErrors(cudaMemset(__f1temp, 0, __kernels.__buffered_size * sizeof(float)));
 
   for(int i = 0; i < __kernels.__buffer_spec.x; ++i) {

@@ -17,10 +17,9 @@ struct Simulation {
   MirroredArray<float> __fluidCells;
   MirroredArray<float> __divergence;
   MirroredArray<float> __pressure;
-  MirroredArray<float> __smoke;
+  MirroredArray<float4> __smoke;
 private:
-  float2 * __f2temp1;
-  float2 * __f2temp2;
+  float2 * __f2temp;
   float * __f1temp;
   Kernels & __kernels;
   int __buffered_size;

@@ -1,11 +1,20 @@
 #pragma once
 
 #include <iostream>
-#include <algorithm>
-#include <cmath>
 #include <vector>
 
 #include <SDL2/SDL.h>
+
+struct FPS {
+  FPS(float _frame_rate);
+  void printCurrent(std::ostream & os) const;
+  void update();
+private:
+  void validate(float & _val);
+  float __frame_rate;
+  float __fps_max, __fps_act;
+  Uint32 __time;
+};
 
 struct OptionBase {
   OptionBase(char const * _name);

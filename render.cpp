@@ -135,6 +135,22 @@ void Renderer::render(float _mag, float2 _off) {
 
 void Renderer::ReportFailure() const {std::cout << SDL_GetError() << std::endl;}
 
+void Renderer::copyToSurface(float * _array, float _mul) {
+  checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
+    cudaArray_t writeArray;
+    checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __visSurface, 0, 0));
+    cudaResourceDesc wdsc;
+    wdsc.resType = cudaResourceTypeArray;
+    wdsc.res.array.array = writeArray;
+    cudaSurfaceObject_t writeSurface;
+    checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
+    __kernels.v2rgba(writeSurface, _array, _mul);
+    checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
+  } checkCudaErrors(cudaGraphicsUnmapResources(1, &__visSurface));
+
+  //checkCudaErrors(cudaStreamSynchronize(0));
+}
+
 void Renderer::copyToSurface(float2 * _array, float _mul) {
   checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
     cudaArray_t writeArray;
@@ -151,7 +167,7 @@ void Renderer::copyToSurface(float2 * _array, float _mul) {
   //checkCudaErrors(cudaStreamSynchronize(0));
 }
 
-void Renderer::copyToSurface(float * _array, float _mul) {
+void Renderer::copyToSurface(float4 * _array, float3 const _map[4]) {
   checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
     cudaArray_t writeArray;
     checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __visSurface, 0, 0));
@@ -160,7 +176,7 @@ void Renderer::copyToSurface(float * _array, float _mul) {
     wdsc.res.array.array = writeArray;
     cudaSurfaceObject_t writeSurface;
     checkCudaErrors(cudaCreateSurfaceObject(&writeSurface, &wdsc));
-    __kernels.v2rgba(writeSurface, _array, _mul);
+    __kernels.float42rgba(writeSurface, _array, _map);
     checkCudaErrors(cudaDestroySurfaceObject(writeSurface));
   } checkCudaErrors(cudaGraphicsUnmapResources(1, &__visSurface));
 

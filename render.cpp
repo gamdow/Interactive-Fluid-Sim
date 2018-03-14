@@ -80,7 +80,7 @@ Renderer::Renderer(Kernels & _kernels)
 
 Renderer::~Renderer() {
   TTF_Quit();
-  //TTF_CloseFont(font);
+  TTF_CloseFont(__font);
   SDL_FreeSurface(__textSurface);
   SDL_GL_DeleteContext(__context);
   SDL_DestroyWindow(__window);
@@ -122,10 +122,10 @@ void Renderer::render(float _mag, float2 _off) {
     float x_prop = static_cast<float>(__textSurface->w) / __kernels.__dims.x;
     float y_prop = static_cast<float>(__textSurface->h) / __kernels.__dims.y;
     glBegin(GL_QUADS); {
-      glTexCoord2f(0.0f, 0.0f); glVertex2f(-1.0f, 1.0f);
-      glTexCoord2f(1.0f, 0.0f); glVertex2f(-1.0f + 2.f * x_prop, 1.0f);
-      glTexCoord2f(1.0f, 1.0f); glVertex2f(-1.0f + 2.f * x_prop, 1.0f - 2.f * y_prop);
-      glTexCoord2f(0.0f, 1.0f); glVertex2f(-1.0f, 1.0f - 2.f * y_prop);
+      glTexCoord2f(0.0f, 0.0f); glVertex2f(-.9f, .9f);
+      glTexCoord2f(1.0f, 0.0f); glVertex2f(-.9f + 1.8f * x_prop, .9f);
+      glTexCoord2f(1.0f, 1.0f); glVertex2f(-.9f + 1.8f * x_prop, .9f - 1.8f * y_prop);
+      glTexCoord2f(0.0f, 1.0f); glVertex2f(-.9f, .9f - 1.8f * y_prop);
     }
     glEnd();
   } glBindTexture(GL_TEXTURE_2D, 0);

@@ -20,19 +20,19 @@ struct MirroredArray {
     , device(nullptr)
   {
     host = new T [size];
-    std::memset(host, 0, size * sizeof(T));
     checkCudaErrors(cudaMalloc((void **) & device, size * sizeof(T)));
-    checkCudaErrors(cudaMemset(device, 0, size * sizeof(T)));
+    reset();
   }
   ~MirroredArray() {
     delete [] host;
     checkCudaErrors(cudaFree(device));
   }
-  T & operator[](int i) {
-    return host[i];
-  }
-  void copyHostToDevice() {
-    checkCudaErrors(cudaMemcpy(device, host, size * sizeof(T), cudaMemcpyHostToDevice));
+  inline T & operator[](int i) {return host[i];}
+  inline void copyHostToDevice() {checkCudaErrors(cudaMemcpy(device, host, size * sizeof(T), cudaMemcpyHostToDevice));}
+  inline void copyDeviceToHost() {checkCudaErrors(cudaMemcpy(host, device, size * sizeof(T), cudaMemcpyDeviceToHost));}
+  void reset() {
+    std::memset(host, 0, size * sizeof(T));
+    checkCudaErrors(cudaMemset(device, 0, size * sizeof(T)));
   }
   int size;
   T * host;

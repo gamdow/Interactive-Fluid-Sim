@@ -10,11 +10,15 @@
 struct OptionBase {
   OptionBase(char const * _name);
   virtual ~OptionBase() {}
-  bool Update(SDL_Event const & event);
+  void Update(SDL_Event const & event);
+  inline void clearChangedFlag() {__changed = false;}
+  inline bool hasChanged() const {return __changed;}
+  inline void printCurrent(std::ostream & os) const {printCurrentImpl(os);}
 private:
   virtual bool updateImpl(SDL_Event const & event) = 0;
-  virtual void printCurrent(std::ostream & os) const = 0;
+  virtual void printCurrentImpl(std::ostream & os) const = 0;
   char const * __name;
+  bool __changed;
 };
 
 // Cycles forward through named values
@@ -27,7 +31,7 @@ private:
   std::string indexToName(int _i) const {return __namedVals[__cur].first;}
   T indexToVal(int _i) const {return __namedVals[__cur].second;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void printCurrent(std::ostream & os) const;
+  virtual void printCurrentImpl(std::ostream & os) const;
   typedef std::vector< std::pair<std::string, T> > Map;
   Map __namedVals;
   int __cur;
@@ -43,7 +47,7 @@ private:
   int valToIndex(T _v) const;
   T indexToVal(int _i) const {return __cur * __step + __min;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void printCurrent(std::ostream & os) const;
+  virtual void printCurrentImpl(std::ostream & os) const;
   T __min;
   int __nSteps;
   T __step;

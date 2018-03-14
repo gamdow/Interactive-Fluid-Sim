@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <cmath>
 
 #include "helper_math.h"
 #include "interface.hpp"
@@ -19,14 +20,46 @@
 void quit(int _code, char const * _message);
 
 static int2 const RESOLUTION = make_int2(1280, 720);
-static int const BUFFER = 1u;
+static int const BUFFER = 5u;
 float2 const LENGTH = {1.6f, 0.9f};
 float const FRAME_RATE = 60.0f;
 
 enum Mode : int {
-  velocity = 0,
+  smoke = 0,
+  velocity,
   divergence,
   pressure
+};
+
+struct FPS {
+  FPS(float _frame_rate)
+    : __frame_rate(_frame_rate)
+    , __fps_max(_frame_rate)
+    , __fps_act(_frame_rate)
+    , __time(SDL_GetTicks())
+  {}
+  void printCurrent(std::ostream & os) const {
+    os << "fps: " << floorf(__fps_act * 10.f) / 10.f << " (" << floorf(__fps_max * 10.f) / 10.f << ")";
+  }
+  void update() {
+    validate(__fps_max);
+    validate(__fps_act);
+    __fps_max = 0.99f * __fps_max + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
+    SDL_Delay(std::max(1000.0f / __frame_rate - (SDL_GetTicks() - __time), 0.0f));
+    __fps_act = 0.99f * __fps_act + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
+    __time = SDL_GetTicks();
+  }
+private:
+  void validate(float & _val) {
+    if(!std::isfinite(_val)) {
+      _val = __frame_rate;
+    } else {
+      _val = std::min(std::max(_val, 0.0f), 1000.0f);
+    }
+  }
+  float __frame_rate;
+  float __fps_max, __fps_act;
+  Uint32 __time;
 };
 
 int main(int argc, char * argv[]) {
@@ -34,41 +67,55 @@ int main(int argc, char * argv[]) {
   Simulation sim(kernels);
   Renderer renderer(kernels);
 
-  float init_velocity = 1.0f;
-  sim.applyBoundary(init_velocity);
 
   SDL_Event event;
 
   std::vector<OptionBase*> options;
 
+  RangeOption<float> vel_multiplier("Velocity Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_r, SDLK_f);
+  options.push_back(&vel_multiplier);
+
   RangeOption<float> vis_multiplier("Visualisation Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_e, SDLK_d);
   options.push_back(&vis_multiplier);
 
-  RangeOption<float> magnification("Magnification", 1.0f, 1.0f, 4.0f, 101, SDLK_q, SDLK_a);
+  RangeOption<float> magnification("Magnification", 1.0f, 1.0f, 4.0f, 101, SDLK_w, SDLK_s);
   options.push_back(&magnification);
 
   RangeOption<float> offset_x("Offset X-Axis", 0.0f, -1.0f, 1.0f, 100, SDLK_LEFT, SDLK_RIGHT);
   options.push_back(&offset_x);
-  RangeOption<float> offset_y("Offset Y-Axis", 0.0f, -1.0f, 1.0f, 100, SDLK_UP, SDLK_DOWN);
+  RangeOption<float> offset_y("Offset Y-Axis", 0.0f, -1.0f, 1.0f, 100, SDLK_DOWN, SDLK_UP);
   options.push_back(&offset_y);
 
   CycleOption<int> mode("Visualisation Mode", SDLK_1);
+  mode.insert("Smoke", Mode::smoke);
   mode.insert("Velocity Field", Mode::velocity);
   mode.insert("Divergence", Mode::divergence);
   mode.insert("Pressure", Mode::pressure);
   options.push_back(&mode);
 
-  float velocity_multiplier = 1.0f;
-  float fps_max = 0.0f;
-  float fps_act = 0.0f;
-  Uint32 time = SDL_GetTicks();
+  sim.applyBoundary(vel_multiplier);
+  FPS fps(FRAME_RATE);
   bool stop = false;
   while(true) {
+
+    for(auto i = options.begin(); i != options.end(); ++i) {
+      (*i)->clearChangedFlag();
+    }
+
     while(SDL_PollEvent(&event)) {
       for(auto i = options.begin(); i != options.end(); ++i) {
         (*i)->Update(event);
       }
       switch(event.type) {
+        case SDL_KEYDOWN:
+          switch(event.key.keysym.sym) {
+            case SDLK_a:
+              sim.applyBoundary(vel_multiplier);
+              break;
+            defaut:
+              break;
+          }
+          break;
         case SDL_QUIT:
           stop = true;
         default:
@@ -79,29 +126,31 @@ int main(int argc, char * argv[]) {
     if(stop) break;
 
     switch(mode) {
+      case Mode::smoke: renderer.copyToSurface(sim.__smoke.device, vis_multiplier); break;
       case Mode::velocity: renderer.copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
-      case Mode::divergence: renderer.copyToSurface(sim.__divergence, 0.1f * vis_multiplier); break;
-      case Mode::pressure: renderer.copyToSurface(sim.__pressure, 50.0f * vis_multiplier); break;
+      case Mode::divergence: renderer.copyToSurface(sim.__divergence.device, 0.1f * vis_multiplier); break;
+      case Mode::pressure: renderer.copyToSurface(sim.__pressure.device, 50.0f * vis_multiplier); break;
     }
 
     std::stringstream os_text;
     os_text.setf(std::ios::fixed, std:: ios::floatfield);
     os_text.precision(2);
-
-    os_text << "fps: " << floorf(fps_act * 10.f) / 10.f << " (" << floorf(fps_max * 10.f) / 10.f << ")";
-
+    fps.printCurrent(os_text);
+    os_text << std::endl;
+    mode.printCurrent(os_text);
     renderer.setText(os_text.str().c_str());
     float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     renderer.render(magnification, offset);
 
+    if(vel_multiplier.hasChanged()) {
+      sim.applyBoundary(vel_multiplier);
+    }
 
+    sim.applySmoke();
     float2 const dx = make_float2(LENGTH.x / kernels.__dims.x, LENGTH.y / kernels.__dims.y);
     sim.step(dx, 1.0f / FRAME_RATE);
 
-    fps_max = 0.99f * fps_max + 0.01f * (1000.f / (SDL_GetTicks() - time));
-    SDL_Delay(std::max(1000.0f / FRAME_RATE - (SDL_GetTicks() - time), 0.0f));
-    fps_act = 0.99f * fps_act + 0.01f * (1000.f / (SDL_GetTicks() - time));
-    time = SDL_GetTicks();
+    fps.update();
   }
 
 

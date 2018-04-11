@@ -1,15 +1,17 @@
 #include "render.hpp"
 
 #include <iostream>
-
 #include <cuda_gl_interop.h>
-
-#include "helper_math.h"
+//
+// #include "helper_math.h"
 #include "helper_cuda.h"
-#include "kernels.cuh"
+#include "kernels_wrapper.cuh"
 
-Renderer::Renderer(Kernels & _kernels)
-  : __kernels(_kernels)
+#include "capability.cuh"
+
+Renderer::Renderer(Kernels & _kers)
+  : __kernels(_kers)
+  , __buffer_spec(_kers.getBufferSpec())
   , __window(nullptr)
   , __context(nullptr)
   , __visTexture(0u)
@@ -22,7 +24,7 @@ Renderer::Renderer(Kernels & _kernels)
     return;
   }
 
-  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, _kernels.__dims.x, _kernels.__dims.y, SDL_WINDOW_OPENGL);
+  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, __buffer_spec.width, __buffer_spec.height, SDL_WINDOW_OPENGL);
   if(__window == nullptr) {
     ReportFailure();
     return;
@@ -57,7 +59,7 @@ Renderer::Renderer(Kernels & _kernels)
   glBindTexture(GL_TEXTURE_2D, __visTexture); {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, _kernels.__dims.x, _kernels.__dims.y, 0, GL_RGBA, GL_FLOAT, nullptr);
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, __buffer_spec.width, __buffer_spec.height, 0, GL_RGBA, GL_FLOAT, nullptr);
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   // Register texture as surface reference (can't write to texture directly)
@@ -119,8 +121,8 @@ void Renderer::render(float _mag, float2 _off) {
   } glBindTexture(GL_TEXTURE_2D, 0);
 
   glBindTexture(GL_TEXTURE_2D, __textTexture); {
-    float x_prop = static_cast<float>(__textSurface->w) / __kernels.__dims.x;
-    float y_prop = static_cast<float>(__textSurface->h) / __kernels.__dims.y;
+    float x_prop = static_cast<float>(__textSurface->w) / __buffer_spec.width;
+    float y_prop = static_cast<float>(__textSurface->h) / __buffer_spec.height;
     glBegin(GL_QUADS); {
       glTexCoord2f(0.0f, 0.0f); glVertex2f(-.9f, .9f);
       glTexCoord2f(1.0f, 0.0f); glVertex2f(-.9f + 1.8f * x_prop, .9f);
@@ -167,7 +169,7 @@ void Renderer::copyToSurface(float2 * _array, float _mul) {
   //checkCudaErrors(cudaStreamSynchronize(0));
 }
 
-void Renderer::copyToSurface(float4 * _array, float3 const _map[4]) {
+void Renderer::copyToSurface(float4 * _array, float3 const * _map) {
   checkCudaErrors(cudaGraphicsMapResources(1, &__visSurface)); {
     cudaArray_t writeArray;
     checkCudaErrors(cudaGraphicsSubResourceGetMappedArray(&writeArray, __visSurface, 0, 0));

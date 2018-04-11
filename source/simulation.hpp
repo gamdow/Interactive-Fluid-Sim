@@ -5,6 +5,7 @@
 #include "memory.hpp"
 
 struct Kernels;
+struct BufferSpec;
 
 struct Simulation {
   Simulation(Kernels & _kernels);
@@ -19,8 +20,8 @@ struct Simulation {
   MirroredArray<float> __pressure;
   MirroredArray<float4> __smoke;
 private:
+  Kernels & __kernels;
+  BufferSpec const & __buffer_spec;
   float2 * __f2temp;
   float * __f1temp;
-  Kernels & __kernels;
-  int __buffered_size;
 };

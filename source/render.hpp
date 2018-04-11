@@ -5,12 +5,11 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
 
-#include <iostream>
-
 struct Kernels;
+struct BufferSpec;
 
 struct Renderer {
-  Renderer(Kernels & _kernels);
+  Renderer(Kernels & _kers);
   ~Renderer();
   void setText(char const * _val);
   void render(float _mag, float2 _off);
@@ -20,7 +19,7 @@ struct Renderer {
 private:
   void ReportFailure() const;
   Kernels & __kernels;
-  int2 __res;
+  BufferSpec const & __buffer_spec;
   SDL_Window * __window;
   SDL_GLContext __context;
   GLuint __visTexture;

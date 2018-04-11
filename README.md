@@ -50,3 +50,7 @@ http://docs.nvidia.com/cuda/cuda-quick-start-guide/index.html#linux
 `$ sudo apt install libsdl2-dev`
 `$ sudo apt install libsdl2-ttf-dev`
 `$ sudo apt install libglew-dev`
+
+## OpenCV
+
+`sudo apt install libopencv-dev`

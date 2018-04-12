@@ -1,18 +1,18 @@
-#include <cuda_runtime.h>
+#pragma once
 
-#include <iostream>
+#include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
 
-struct Capability;
+#include "resolution.cuh"
 
 struct Camera {
-  Camera(Capability const & _cap, int _index);
+  Camera(Resolution _res, int _index);
 
   void foo() {
     bool success = __capture.read(__input_frame);
   }
+  Resolution resolution;
 private:
-  Capability const & __capability;
   cv::VideoCapture __capture;
   cv::Mat __input_frame;
 };

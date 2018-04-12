@@ -5,25 +5,24 @@
 // #include <SDL2/SDL_ttf.h>
 
 // #include <algorithm>
-// #include <iostream>
+#include <iostream>
 // #include <vector>
-// #include <iomanip>
+#include <iomanip>
 // #include <cmath>
 
 // #include "helper_math.h"
-#include "capability.cuh"
+#include "resolution.cuh"
+#include "cuda_utility.cuh"
 #include "kernels_wrapper.cuh"
 #include "camera.hpp"
-#include "render.hpp"
+#include "renderer.hpp"
 #include "simulation.hpp"
-#include "memory.hpp"
 #include "interface.hpp"
-
 
 void quit(int _code, char const * _message);
 
 int const VIDCAM_INDEX = 0;
-int2 const RESOLUTION = make_int2(1280, 720);
+Resolution const RESOLUTION = Resolution(1280, 720);
 int const BUFFER = 10u;
 float2 const LENGTH = {1.6f, 0.9f};
 float const FRAME_RATE = 60.0f;
@@ -39,13 +38,18 @@ enum Mode : int {
 
 int main(int argc, char * argv[]) {
 
-  Capability capability(RESOLUTION, BUFFER);
-  Camera camera(capability, VIDCAM_INDEX);
-  Kernels kernels(capability);
+  std::cout << std::endl;
+  reportCudaCapability();
+  std::cout << std::endl;
+  KernelsWrapper kernels(RESOLUTION, BUFFER);
+  std::cout << std::endl;
   Simulation sim(kernels);
-  Renderer renderer(kernels);
+  std::cout << std::endl;
+  Camera camera(RESOLUTION, VIDCAM_INDEX);
+  std::cout << std::endl;
+  Renderer renderer(RESOLUTION, camera, kernels);
 
-  MirroredArray<uchar3> camera_frame(kernels.getBufferSpec().size);
+  //MirroredArray<uchar3> camera_frame(kernels.getSimBufferSpec().size);
 
   std::vector<OptionBase*> options;
   RangeOption<float> vel_multiplier("Velocity Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_r, SDLK_f);
@@ -109,11 +113,11 @@ int main(int argc, char * argv[]) {
     if(stop) break;
 
     switch(mode) {
-      case Mode::smoke: renderer.copyToSurface(sim.__smoke.device, color_map.device); break;
-      case Mode::velocity: renderer.copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
-      case Mode::divergence: renderer.copyToSurface(sim.__divergence.device, 0.1f * vis_multiplier); break;
-      case Mode::pressure: renderer.copyToSurface(sim.__pressure.device, 50.0f * vis_multiplier); break;
-      case Mode::fluid: renderer.copyToSurface(sim.__fluidCells.device, vis_multiplier); break;
+      case Mode::smoke: renderer.getVisualisation().copyToSurface(sim.__smoke.device, color_map.device); break;
+      case Mode::velocity: renderer.getVisualisation().copyToSurface(sim.__velocity.device, 0.25f * vis_multiplier); break;
+      case Mode::divergence: renderer.getVisualisation().copyToSurface(sim.__divergence.device, 0.1f * vis_multiplier); break;
+      case Mode::pressure: renderer.getVisualisation().copyToSurface(sim.__pressure.device, 50.0f * vis_multiplier); break;
+      case Mode::fluid: renderer.getVisualisation().copyToSurface(sim.__fluidCells.device, vis_multiplier); break;
     }
 
     std::stringstream os_text;
@@ -130,7 +134,7 @@ int main(int argc, char * argv[]) {
     sim.applyBoundary(vel_multiplier);
     sim.applySmoke();
     for(int i = 0; i < SIM_STEPS_PER_FRAME; ++i) {
-      float2 const dx = make_float2(LENGTH.x / capability.adjusted_dims.x, LENGTH.y / capability.adjusted_dims.y);
+      float2 const dx = make_float2(LENGTH.x / RESOLUTION.width, LENGTH.y / RESOLUTION.height);
       sim.step(dx, 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE));
     }
 

@@ -1,23 +1,33 @@
 #include "simulation.hpp"
 
+#include <iostream>
+#include <typeinfo>
+
 #include "helper_math.h"
+#include "helper_cuda.h"
 #include "kernels_wrapper.cuh"
-#include "buffer_spec.cuh"
 
 int const PRESSURE_SOLVER_STEPS = 50;
 
-Simulation::Simulation(Kernels & _kernels)
-  : __kernels(_kernels)
-  , __buffer_spec(_kernels.getBufferSpec())
-  , __velocity(_kernels.getBufferSpec().size)
-  , __fluidCells(_kernels.getBufferSpec().size)
-  , __divergence(_kernels.getBufferSpec().size)
-  , __pressure(_kernels.getBufferSpec().size)
-  , __smoke(_kernels.getBufferSpec().size)
+SimulationBase::SimulationBase(KernelsWrapper const & _kers) {
+  std::cout << "Constructing Simluation Device Buffers:" << std::endl;
+  _kers.getBufferRes().print("\tResolution");
+}
+
+Simulation::Simulation(KernelsWrapper & _kers)
+  : SimulationBase(_kers)
+  , __kernels(_kers)
+  , __velocity(_kers.getBufferRes().size)
+  , __fluidCells(_kers.getBufferRes().size)
+  , __divergence(_kers.getBufferRes().size)
+  , __pressure(_kers.getBufferRes().size)
+  , __smoke(_kers.getBufferRes().size)
 {
-  checkCudaErrors(cudaMalloc((void **) & __f2temp, __buffer_spec.size * sizeof(float2)));
-  checkCudaErrors(cudaMalloc((void **) & __f1temp, __buffer_spec.size * sizeof(float)));
+  reportCudaMalloc(__f1temp, __kernels.getBufferRes().size);
+  reportCudaMalloc(__f2temp, __kernels.getBufferRes().size);
   reset();
+
+  std::cout << "\tTotal: " << __velocity.getTotalBytes() + __fluidCells.getTotalBytes() + __divergence.getTotalBytes() + __pressure.getTotalBytes() + __smoke.getTotalBytes() + __kernels.getBufferRes().size * (sizeof(float) + sizeof(float2)) << " bytes" << std::endl;
 }
 
 Simulation::~Simulation() {
@@ -53,34 +63,32 @@ void Simulation::step(float2 _d, float _dt) {
 
 void Simulation::applyBoundary(float _vel) {
   __velocity.copyDeviceToHost();
-
-  for(int j = __buffer_spec.buffer; j < __buffer_spec.height - __buffer_spec.buffer; ++j) {
-    for(int i = 0; i < __buffer_spec.buffer * 2; ++i) {
-      __velocity[i + j * __buffer_spec.width] = make_float2(_vel, 0.f);
+  Resolution const & buffer_res = __kernels.getBufferRes();
+  for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+    for(int i = 0; i < buffer_res.buffer * 2; ++i) {
+      __velocity[i + j * buffer_res.width] = make_float2(_vel, 0.f);
     }
-    for(int i = __buffer_spec.width - __buffer_spec.buffer * 2; i < __buffer_spec.width; ++i) {
-      __velocity[i + j * __buffer_spec.width] = make_float2(_vel, 0.f);
+    for(int i = buffer_res.width - buffer_res.buffer * 2; i < buffer_res.width; ++i) {
+      __velocity[i + j * buffer_res.width] = make_float2(_vel, 0.f);
     }
   }
-
   __velocity.copyHostToDevice();
 }
 
 void Simulation::applySmoke() {
   __smoke.copyDeviceToHost();
-
-  for(int j = __buffer_spec.buffer; j < __buffer_spec.height - __buffer_spec.buffer; ++j) {
-    for(int i = 0; i < __buffer_spec.buffer * 2; ++i) {
+  Resolution const & buffer_res = __kernels.getBufferRes();
+  for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+    for(int i = 0; i < buffer_res.buffer * 2; ++i) {
       int z = (j / 20) % 4;
-      __smoke[i + j * __buffer_spec.width] = make_float4(
+      __smoke[i + j * buffer_res.width] = make_float4(
         z == 0 ? 1.0f : 0.f,
         z == 1 ? 1.0f : 0.f,
         z == 2 ? 1.0f : 0.f,
         z == 3 ? 1.0f : 0.f
-      ) * powf(cosf((j - __buffer_spec.buffer) * 3.14159f * (2.0f / 40)),2);
+      ) * powf(cosf((j - buffer_res.buffer) * 3.14159f * (2.0f / 40)),2);
     }
   }
-
   __smoke.copyHostToDevice();
 }
 
@@ -90,50 +98,34 @@ void Simulation::reset() {
   __divergence.reset();
   __pressure.reset();
   __smoke.reset();
-  checkCudaErrors(cudaMemset(__f2temp, 0, __buffer_spec.size * sizeof(float2)));
-  checkCudaErrors(cudaMemset(__f1temp, 0, __buffer_spec.size * sizeof(float)));
-
-  for(int i = 0; i < __buffer_spec.width; ++i) {
-    for(int j = __buffer_spec.buffer; j < __buffer_spec.height - __buffer_spec.buffer; ++j) {
-      __fluidCells[i + j * __buffer_spec.width] = 1.0f;
+  Resolution const & buffer_res = __kernels.getBufferRes();
+  checkCudaErrors(cudaMemset(__f1temp, 0, buffer_res.size * sizeof(float)));
+  checkCudaErrors(cudaMemset(__f2temp, 0, buffer_res.size * sizeof(float2)));
+  for(int i = 0; i < buffer_res.width; ++i) {
+    for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+      __fluidCells[i + j * buffer_res.width] = 1.0f;
     }
   }
-
-  // for(int k = 0; k < 5; ++k) {
-  //   for(int l = 0; l < 3; ++l) {
-  //     float2 center = make_float2(k * 80 + 100 + 50 * ((l + 1) % 2), l * 70 + 120);
-  //     for(int i = 0; i < BUFFERED_DIMS.x; ++i) {
-  //       for(int j = 0; j < BUFFERED_DIMS.y; ++j) {
-  //         if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 1000) {
-  //           fluidCells[i + j * BUFFERED_DIMS.x] = 0.0f;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
   for(int k = 0; k < 5; ++k) {
     int odd = k % 2;
     for(int l = 0; l < 3 + odd; ++l) {
-      float2 center = make_float2(k * 80 - 2.5f * 80.f + __buffer_spec.width / 2, l * 80 - 2.5f * 80.f + 100 - 40 * odd + __buffer_spec.height / 2);
-      for(int i = 0; i < __buffer_spec.width; ++i) {
-        for(int j = 0; j < __buffer_spec.height; ++j) {
+      float2 center = make_float2(k * 80 - 2.5f * 80.f + buffer_res.width / 2, l * 80 - 2.5f * 80.f + 100 - 40 * odd + buffer_res.height / 2);
+      for(int i = 0; i < buffer_res.width; ++i) {
+        for(int j = 0; j < buffer_res.height; ++j) {
           if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 1000) {
-            __fluidCells[i + j * __buffer_spec.width] = 0.0f;
+            __fluidCells[i + j * buffer_res.width] = 0.0f;
           }
         }
       }
     }
   }
-
-  for(int i = 0; i < __buffer_spec.width; ++i) {
-    for(int j = 0; j < __buffer_spec.buffer; ++j) {
-      __fluidCells[i + j * __buffer_spec.width] = 0.0f;
+  for(int i = 0; i < buffer_res.width; ++i) {
+    for(int j = 0; j < buffer_res.buffer; ++j) {
+      __fluidCells[i + j * buffer_res.width] = 0.0f;
     }
-    for(int j = __buffer_spec.height - __buffer_spec.buffer; j < __buffer_spec.height; ++j) {
-      __fluidCells[i + j * __buffer_spec.width] = 0.0f;
+    for(int j = buffer_res.height - buffer_res.buffer; j < buffer_res.height; ++j) {
+      __fluidCells[i + j * buffer_res.width] = 0.0f;
     }
   }
-
   __fluidCells.copyHostToDevice();
 }

@@ -10,7 +10,7 @@ CXX = nvcc
 NVCC_INCS = -I/usr/include/SDL2 -I/usr/include/opencv2
 NVCC_LIBS = -lSDL2 -lSDL2_ttf -lGLEW -lGL -lopencv_core -lopencv_videoio
 
-go: clean run
+go: run
 	./run
 
 $(BUILDDIR)/%.o: $(SOURCEDIR)/%.cpp

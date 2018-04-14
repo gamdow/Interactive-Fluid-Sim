@@ -1,24 +1,33 @@
 #include "camera.hpp"
 
 #include <iostream>
+#include <string>
+#include <thread>
 #include <cuda_runtime.h>
 #include <opencv2/opencv.hpp>
 
-Camera::Camera(Resolution _res, int _index)
+void capture(cv::VideoCapture & _capture, cv::Mat & _mat) {
+  while(true) {
+    _capture.read(_mat);
+  }
+}
+
+Camera::Camera(Resolution _res, int _index, float _frame_rate)
   : __capture(_index)
 {
   if(__capture.isOpened() == false) {
-    std::cout << "OpenCV: Cannot open the video camera " << _index << "." << std::endl;
-    return;
+    std::stringstream error; error << "OpenCV: Cannot open video camera (id:" << _index << ").";
+    throwFailure(error.str());
   }
   std::cout << "OpenCV: Video camera found (id:" << _index << ")" << std::endl;
   __capture.set(cv::CAP_PROP_FRAME_WIDTH, _res.width);
   __capture.set(cv::CAP_PROP_FRAME_HEIGHT, _res.height);
+  __capture.set(cv::CAP_PROP_FPS, _frame_rate);
   resolution = Resolution(__capture.get(cv::CAP_PROP_FRAME_WIDTH), __capture.get(cv::CAP_PROP_FRAME_HEIGHT));
   resolution.print("\tResolution");
   if(!__capture.read(__input_frame)) {
-    std::cout << "OpenCV: Could not capture frame." << std::endl;
-    return;
+    std::stringstream error; error << "OpenCV: Could not capture frame.";
+    throwFailure(error.str());
   }
   static char const * depth_names[] = {"8U", "8S", "16U", "16S", "32S", "32F", "64F"};
   std::cout << "\tDepth: " << depth_names[__input_frame.depth()] << std::endl;
@@ -26,4 +35,6 @@ Camera::Camera(Resolution _res, int _index)
   for(int i = 0; i < __input_frame.dims; ++i) {
     std::cout << "\tStep: " << i << ": " << __input_frame.step[i] << std::endl;
   }
+
+  __capThread = std::thread(capture, std::ref(__capture), std::ref(__input_frame));
 }

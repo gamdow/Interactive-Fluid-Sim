@@ -4,7 +4,7 @@
 #include "helper_cuda.h"
 
 // #include <iostream> // for host code
-// #include <stdio.h> // for kernel code
+#include <stdio.h> // for kernel code
 
 float const PI = 3.14159265359f;
 
@@ -77,11 +77,21 @@ __global__ void enforce_slip(float2 * io_velocity, float const * _fluid, Resolut
   }
 }
 
-// Render 2D field (i.e. velocity) by treating as HSV (hue=direction, saturation=1, value=magnitude) and converting to RGBA
-__global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 const * _array, float _power, Resolution _buffer_res) {
+__global__ void d_to_rgba(cudaSurfaceObject_t o_surface, Resolution _surface_res, float const * _buffer, Resolution _buffer_res, float _multiplier) {
   int const idx = _buffer_res.idx();
-  float h = 6.0f * (atan2f(-_array[idx].x, -_array[idx].y) / (2 * PI) + 0.5);
-  float v = __powf(_array[idx].x * _array[idx].x + _array[idx].y * _array[idx].y, _power);
+  float pos = (_buffer[idx] + abs(_buffer[idx])) / 2.0f;
+  float neg = -(_buffer[idx] - abs(_buffer[idx])) / 2.0f;
+  float4 rgb = make_float4(neg * _multiplier, pos * _multiplier, 0.0, 1.0f);
+  rgb.w = fmin(rgb.x + rgb.y + rgb.z, 1.f);
+  int buffer_diff = _surface_res.buffer - _buffer_res.buffer;
+  surf2Dwrite(rgb, o_surface, (_buffer_res.x() + buffer_diff) * sizeof(float4), _buffer_res.y() + buffer_diff);
+}
+
+// Render 2D field (i.e. velocity) by treating as HSV (hue=direction, saturation=1, value=magnitude) and converting to RGBA
+__global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, Resolution _surface_res, float2 const * _buffer, Resolution _buffer_res, float _power) {
+  int const idx = _buffer_res.idx();
+  float h = 6.0f * (atan2f(-_buffer[idx].x, -_buffer[idx].y) / (2 * PI) + 0.5);
+  float v = __powf(_buffer[idx].x * _buffer[idx].x + _buffer[idx].y * _buffer[idx].y, _power);
   float hi = floorf(h);
   float f = h - hi;
   float q = v * (1 - f);
@@ -106,27 +116,23 @@ __global__ void hsv_to_rgba(cudaSurfaceObject_t o_surface, float2 const * _array
     rgb.x = v;
     rgb.z = q;
   }
-  surf2Dwrite(rgb, o_surface, (_buffer_res.x() - _buffer_res.buffer) * sizeof(float4), (_buffer_res.y() - _buffer_res.buffer));
-}
-
-__global__ void d_to_rgba(cudaSurfaceObject_t o_surface, float const * _array, float _multiplier, Resolution _buffer_res) {
-  int const idx = _buffer_res.idx();
-  float pos = (_array[idx] + abs(_array[idx])) / 2.0f;
-  float neg = -(_array[idx] - abs(_array[idx])) / 2.0f;
-  float4 rgb = make_float4(neg * _multiplier, pos * _multiplier, 0.0, 1.0f);
-  surf2Dwrite(rgb, o_surface, (_buffer_res.x() - _buffer_res.buffer) * sizeof(float4), (_buffer_res.y() - _buffer_res.buffer));
+  rgb.w = fmin(rgb.x + rgb.y + rgb.z, 1.f);
+  int buffer_diff = _surface_res.buffer - _buffer_res.buffer;
+  surf2Dwrite(rgb, o_surface, (_buffer_res.x() + buffer_diff) * sizeof(float4), _buffer_res.y() + buffer_diff);
 }
 
 // Render 4D field by operating on it with a 4x3 matrix, where the rows are RGB values (a colour for each dimension).
-__global__ void float4_to_rgba(cudaSurfaceObject_t o_surface, float4 const * _array, float3 const * _map, Resolution _buffer_res) {
+__global__ void float4_to_rgba(cudaSurfaceObject_t o_surface, Resolution _surface_res, float4 const * _buffer, Resolution _buffer_res, float3 const * _map) {
   int const idx = _buffer_res.idx();
   float4 rgb = make_float4(
-    _array[idx].x * _map[0].x + _array[idx].y * _map[1].x + _array[idx].z * _map[2].x + _array[idx].w * _map[3].x,
-    _array[idx].x * _map[0].y + _array[idx].y * _map[1].y + _array[idx].z * _map[2].y + _array[idx].w * _map[3].y,
-    _array[idx].x * _map[0].z + _array[idx].y * _map[1].z + _array[idx].z * _map[2].z + _array[idx].w * _map[3].z,
-    0.5f * (_array[idx].x + _array[idx].y + _array[idx].z + _array[idx].w)
+    _buffer[idx].x * _map[0].x + _buffer[idx].y * _map[1].x + _buffer[idx].z * _map[2].x + _buffer[idx].w * _map[3].x,
+    _buffer[idx].x * _map[0].y + _buffer[idx].y * _map[1].y + _buffer[idx].z * _map[2].y + _buffer[idx].w * _map[3].y,
+    _buffer[idx].x * _map[0].z + _buffer[idx].y * _map[1].z + _buffer[idx].z * _map[2].z + _buffer[idx].w * _map[3].z,
+    0.75f * (_buffer[idx].x + _buffer[idx].y + _buffer[idx].z + _buffer[idx].w)
   );
-  surf2Dwrite(rgb, o_surface, (_buffer_res.x() - _buffer_res.buffer) * sizeof(float4), (_buffer_res.y() - _buffer_res.buffer));
+  rgb.w = fmin(rgb.x + rgb.y + rgb.z, 1.f);
+  int buffer_diff = _surface_res.buffer - _buffer_res.buffer;
+  surf2Dwrite(rgb, o_surface, (_buffer_res.x() + buffer_diff) * sizeof(float4), _buffer_res.y() + buffer_diff);
 }
 
 __global__ void sum_arrays(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2, Resolution _buffer_res) {

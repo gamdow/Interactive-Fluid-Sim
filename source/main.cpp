@@ -22,7 +22,7 @@
 void quit(int _code, char const * _message);
 
 int const VIDCAM_INDEX = 0;
-Resolution const RESOLUTION = Resolution(1280, 720);
+Resolution const RESOLUTION = Resolution(640, 480);
 int const BUFFER = 10u;
 float2 const LENGTH = {1.6f, 0.9f};
 float const FRAME_RATE = 60.0f;
@@ -45,9 +45,10 @@ int main(int argc, char * argv[]) {
   std::cout << std::endl;
   Simulation sim(kernels);
   std::cout << std::endl;
-  Camera camera(RESOLUTION, VIDCAM_INDEX);
+  Camera camera(RESOLUTION, VIDCAM_INDEX, FRAME_RATE);
   std::cout << std::endl;
   Renderer renderer(RESOLUTION, camera, kernels);
+  std::cout << std::endl;
 
   //MirroredArray<uchar3> camera_frame(kernels.getSimBufferSpec().size);
 
@@ -56,7 +57,7 @@ int main(int argc, char * argv[]) {
   options.push_back(&vel_multiplier);
   RangeOption<float> vis_multiplier("Visualisation Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_e, SDLK_d);
   options.push_back(&vis_multiplier);
-  RangeOption<float> magnification("Magnification", 1.0f, 1.0f, 4.0f, 101, SDLK_w, SDLK_s);
+  RangeOption<float> magnification("Magnification", 1.0f, 0.5f, 4.0f, 460, SDLK_w, SDLK_s);
   options.push_back(&magnification);
   RangeOption<float> offset_x("Offset X-Axis", 0.0f, -1.0f, 1.0f, 100, SDLK_LEFT, SDLK_RIGHT);
   options.push_back(&offset_x);
@@ -130,6 +131,8 @@ int main(int argc, char * argv[]) {
 
     float2 offset = make_float2(offset_x, offset_y) * (magnification - 1.0f);
     renderer.render(magnification, offset);
+
+    renderer.getBackground().bindTexture(camera.data());
 
     sim.applyBoundary(vel_multiplier);
     sim.applySmoke();

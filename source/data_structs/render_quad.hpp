@@ -6,8 +6,8 @@
 #include <SDL2/SDL_ttf.h>
 #include <opencv2/opencv.hpp>
 
+#include "../kernels/kernels_wrapper.cuh"
 #include "resolution.cuh"
-#include "kernels_wrapper.cuh"
 
 struct RenderQuad {
   RenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type);
@@ -30,7 +30,8 @@ private:
 
 struct SurfaceRenderQuad : public RenderQuad {
   SurfaceRenderQuad(KernelsWrapper & _kers, Resolution const & _res, GLint _internal, GLenum _format, GLenum _type);
-  template<typename ARRAY, typename MULTIPLIER> void copyToSurface(ARRAY * _array, MULTIPLIER _mul);
+  void copyToSurface(float4 * _array);
+  // template<typename ARRAY, typename MULTIPLIER> void copyToSurface(ARRAY * _array, MULTIPLIER _mul);
 private:
   cudaSurfaceObject_t createSurfaceObject();
   void destroySurfaceObject(cudaSurfaceObject_t _writeSurface);
@@ -38,12 +39,12 @@ private:
   cudaGraphicsResource_t __surface;
 };
 
-template<typename ARRAY, typename MULTIPLIER>
-void SurfaceRenderQuad::copyToSurface(ARRAY * _array, MULTIPLIER _mul) {
-  cudaSurfaceObject_t writeSurface = createSurfaceObject();
-  __kernels.array2rgba(writeSurface, resolution(), _array, _mul);
-  destroySurfaceObject(writeSurface);
-}
+// template<typename ARRAY, typename MULTIPLIER>
+// void SurfaceRenderQuad::copyToSurface(ARRAY * _array, MULTIPLIER _mul) {
+//   cudaSurfaceObject_t writeSurface = createSurfaceObject();
+//   __kernels.array2rgba(writeSurface, resolution(), _array, _mul);
+//   destroySurfaceObject(writeSurface);
+// }
 
 struct TextRenderQuad : public RenderQuad {
   TextRenderQuad();

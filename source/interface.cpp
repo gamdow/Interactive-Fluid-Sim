@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "simulation.hpp"
+
 
 FormatScope::FormatScope(std::ostream & os)
   : __os(os)
@@ -138,4 +140,5 @@ void RangeOption<T>::reportCurrentImpl(std::ostream & os) const {
 }
 
 template class CycleOption<int>;
+template class CycleOption<Mode>;
 template class RangeOption<float>;

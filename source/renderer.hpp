@@ -6,11 +6,11 @@
 #include <SDL2/SDL_ttf.h>
 #include <opencv2/opencv.hpp>
 
-#include "render_quad.hpp"
+#include "data_structs/render_quad.hpp"
 #include "component.hpp"
-#include "resolution.cuh"
+#include "data_structs/resolution.cuh"
 #include "camera.hpp"
-#include "kernels_wrapper.cuh"
+#include "kernels/kernels_wrapper.cuh"
 
 struct OpenGLInitialiser: public Component {
   OpenGLInitialiser(Resolution _res);

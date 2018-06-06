@@ -1,9 +1,9 @@
-#include "renderer.hpp"
+#include "render_quad.hpp"
 
 #include <iostream>
 #include <cuda_gl_interop.h>
 
-#include "helper_cuda.h"
+#include "../cuda/helper_cuda.h"
 
 RenderQuad::RenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
   : __id(0u)
@@ -81,6 +81,12 @@ cudaSurfaceObject_t SurfaceRenderQuad::createSurfaceObject() {
 void SurfaceRenderQuad::destroySurfaceObject(cudaSurfaceObject_t _writeSurface) {
   cudaDestroySurfaceObject(_writeSurface);
   cudaGraphicsUnmapResources(1, &__surface);
+}
+
+void SurfaceRenderQuad::copyToSurface(float4 * _array) {
+  cudaSurfaceObject_t writeSurface = createSurfaceObject();
+  __kernels.copyToSurface(writeSurface, resolution(), _array);
+  destroySurfaceObject(writeSurface);
 }
 
 TextRenderQuad::TextRenderQuad()

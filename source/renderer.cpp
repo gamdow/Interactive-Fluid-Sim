@@ -3,7 +3,7 @@
 #include <iostream>
 #include <cuda_gl_interop.h>
 
-#include "helper_cuda.h"
+#include "cuda/helper_cuda.h"
 
 OpenGLInitialiser::OpenGLInitialiser(Resolution _res)
   : __window(nullptr)
@@ -80,6 +80,6 @@ Renderer::~Renderer() {
 void Renderer::render(float _mag, float2 _off) {
   __background.render(__windowRes, _mag, _off);
   __visualisation.render(__windowRes, _mag, _off);
-  //__text.render(__windowRes, _mag, _off);
+  __text.render(__windowRes, _mag, _off);
   swapWindow();
 }

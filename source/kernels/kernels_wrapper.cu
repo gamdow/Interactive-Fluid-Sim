@@ -75,17 +75,33 @@ void KernelsWrapper::enforceSlip(float2 * io_velocity, float const * _fluid) {
   enforce_slip<<<grid,block>>>(io_velocity, _fluid, __buffer_res);
 }
 
-void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, float _multiplier) {
-  d_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _multiplier);
+void KernelsWrapper::d2rgba(float4 * o_buffer, float const * _buffer, float _multiplier) {
+  d_to_rgba<<<grid,block>>>(o_buffer, _buffer, __buffer_res, _multiplier);
 }
 
-void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _buffer, float _power) {
-  hsv_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _power);
+void KernelsWrapper::hsv2rgba(float4 * o_buffer, float2 const * _buffer, float _power) {
+  hsv_to_rgba<<<grid,block>>>(o_buffer, _buffer, __buffer_res, _power);
 }
 
-void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, float3 const * _map) {
-  float4_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _map);
+void KernelsWrapper::float42rgba(float4 * o_buffer, float4 const * _buffer, float3 const * _map) {
+  float4_to_rgba<<<grid,block>>>(o_buffer, _buffer, __buffer_res, _map);
 }
+
+void KernelsWrapper::copyToSurface(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer) {
+  copy_to_surface<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res);
+}
+
+// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, float _multiplier) {
+//   d_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _multiplier);
+// }
+//
+// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _buffer, float _power) {
+//   hsv_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _power);
+// }
+//
+// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, float3 const * _map) {
+//   float4_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _map);
+// }
 
 void KernelsWrapper::sum(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2) {
   sum_arrays<<<grid,block>>>(o_array, _c1, _array1, _c2, _array2, __buffer_res);

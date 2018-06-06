@@ -5,7 +5,7 @@
 #include <thread>
 
 #include "component.hpp"
-#include "resolution.cuh"
+#include "data_structs/resolution.cuh"
 
 struct Camera : public Component {
   cv::Mat const & data() const {return __data();}

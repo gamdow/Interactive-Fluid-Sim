@@ -1,25 +1,31 @@
-BUILDDIR = build
-SOURCEDIR = source
+BUILDDIR := build
+SOURCEDIR := source
+SUBDIRS := $(sort $(dir $(wildcard $(SOURCEDIR)/*/)))
 
-CPP_SRC = $(wildcard $(SOURCEDIR)/*.cpp)
-CU_SRC = $(wildcard $(SOURCEDIR)/*.cu)
+# CPP_SRC = $(wildcard $(SOURCEDIR)/**/*.cpp)
+CPP_SRC = $(wildcard $(addsuffix *.cpp,$(SUBDIRS)))
+# CU_SRC = $(wildcard $(SOURCEDIR)/**/*.cu)
+CU_SRC = $(wildcard $(addsuffix *.cu,$(SUBDIRS)))
+# OBJS = $(patsubst $(SOURCEDIR)/%.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(CPP_SRC))
 OBJS = $(patsubst $(SOURCEDIR)/%.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(CPP_SRC))
-HEADERS = $(wildcard $(SOURCEDIR)/*.hpp) $(wildcard $(SOURCEDIR)/*.cuh)
+# HEADERS = $(wildcard $(SOURCEDIR)/**/*.hpp) $(wildcard $(SOURCEDIR)/*.cuh)
+HEADERS = $(wildcard $(addsuffix *.hpp,$(SUBDIRS))) $(wildcard $(addsuffix *.cuh,$(SUBDIRS)))
 
 CC = nvcc
 CXX = nvcc
 NVCC_INCS = -I/usr/include/SDL2 -I/usr/include/opencv2
 NVCC_LIBS = -lSDL2 -lSDL2_ttf -lGLEW -lGL -lopencv_core -lopencv_videoio -lopencv_imgproc
 
+
 go: run
 	./run
 
-$(BUILDDIR)/%.o: $(SOURCEDIR)/%.cpp $(HEADERS)
-	@mkdir -p build
+$(BUILDDIR)/%.o : $(SOURCEDIR)/%.cpp $(HEADERS)
+	@mkdir -p $(@D)
 	$(CXX) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $<
 
-$(BUILDDIR)/%.o: $(SOURCEDIR)/%.cu $(HEADERS)
-	@mkdir -p build
+$(BUILDDIR)/%.o : $(SOURCEDIR)/%.cu $(HEADERS)
+	@mkdir -p $(@D)
 	$(CC) $(NVCC_INCS) $(NVCC_LIBS) -o $@ -c $<
 
 run: $(OBJS)

@@ -1,6 +1,6 @@
-#include "cuda_utility.cuh"
+#include "utility.cuh"
 
-#include "kernels.cuh"
+#include "../kernels/kernels.cuh"
 
 void reportCudaCapability() {
   int deviceCount = 0;

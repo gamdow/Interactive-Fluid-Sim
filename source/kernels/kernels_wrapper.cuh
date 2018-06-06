@@ -2,8 +2,8 @@
 
 #include <cuda_runtime.h>
 
-#include "cuda_utility.cuh"
-#include "resolution.cuh"
+#include "../cuda/utility.cuh"
+#include "../data_structs/resolution.cuh"
 
 // Wrapper for the simulation kernels that ensures the necessary CUDA resources are available and all the dimensions are consistent.
 struct KernelsWrapper : public OptimalBlockConfig {
@@ -18,10 +18,14 @@ struct KernelsWrapper : public OptimalBlockConfig {
   void pressureSolve(float * o_pressure, float const * _pressure, float const * _divergence, float const * _fluid, float2 _dx);
   void subGradient(float2 * io_velocity, float const * _pressure, float const * _fluid, float2 _rdx);
   void enforceSlip(float2 * io_velocity, float const * _fluid);
-  void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _array, float _mul);
-  void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _array, float _mul);
-  void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array, float3 const * _map);
   void sum(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2);
+  void d2rgba(float4 * o_buffer, float const * _buffer, float _multiplier);
+  void hsv2rgba(float4 * o_buffer, float2 const * _buffer, float _power);
+  void float42rgba(float4 * o_buffer, float4 const * _buffer, float3 const * _map);
+  void copyToSurface(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array);
+  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _array, float _mul);
+  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _array, float _mul);
+  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array, float3 const * _map);
   Resolution const & resolution() const {return __buffer_res;}
   Resolution const & getBufferRes() const {return __buffer_res;}
 private:

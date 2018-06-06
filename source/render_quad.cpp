@@ -50,7 +50,7 @@ void RenderQuad::bindTexture(cv::Mat const & _mat) {
 
 void RenderQuad::updateQuad(Resolution _window_res, float _mag, float2 _off) {
   for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = (verts[i].z * 2.f - 1.f) * _mag * static_cast<float>(__resolution.width) / static_cast<float>(_window_res.width) + _off.x;
+    verts[i].x = (verts[i].z * 2.f - 1.f) * _mag * static_cast<float>(__resolution.width) / static_cast<float>(_window_res.width) - _off.x;
     verts[i].y = (1.f - verts[i].w * 2.f) * _mag * static_cast<float>(__resolution.height) / static_cast<float>(_window_res.height) + _off.y;
   }
 }

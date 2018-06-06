@@ -32,6 +32,10 @@ void KernelsWrapper::advectVelocity(float2 * o_velocity, float2 const * _velocit
   advect_velocity<<<grid,block>>>(o_velocity, __f2Object.__object, __buffer_res, _dt, _rdx);
 }
 
+void KernelsWrapper::limitAdvection(float2 * o_e, float2 * _e1, float2 * _e2) {
+  limit_advection<<<grid,block>>>(o_e, _e1, _e2, __buffer_res);
+}
+
 // template magic to convert element type (float, float2, etc.) to an instance of the matching TextureObject for the templated applyAdvection
 template<> TextureObject<float> & KernelsWrapper::selectTextureObject<float>() {return __f1Object;}
 template<> TextureObject<float2> & KernelsWrapper::selectTextureObject<float2>() {return __f2Object;}

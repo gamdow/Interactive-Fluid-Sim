@@ -68,8 +68,8 @@ Renderer::Renderer(Resolution _res, Camera & _cam, KernelsWrapper & _kers)
   : OpenGLInitialiser(_res)
   , __windowRes(_res)
   , __kernels(_kers)
-  , __background(_cam.resolution, GL_RGB, GL_BGR, GL_UNSIGNED_BYTE)
-  , __visualisation(_kers, _kers.optimal_res, GL_RGBA32F, GL_RGBA, GL_FLOAT)
+  , __background(_cam.resolution(), GL_RGB, GL_BGR, GL_UNSIGNED_BYTE)
+  , __visualisation(_kers, _kers.resolution(), GL_RGBA32F, GL_RGBA, GL_FLOAT)
   , __text()
 {
 }
@@ -80,6 +80,6 @@ Renderer::~Renderer() {
 void Renderer::render(float _mag, float2 _off) {
   __background.render(__windowRes, _mag, _off);
   __visualisation.render(__windowRes, _mag, _off);
-  __text.render(__windowRes, _mag, _off);
+  //__text.render(__windowRes, _mag, _off);
   swapWindow();
 }

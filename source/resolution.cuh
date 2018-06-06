@@ -13,6 +13,8 @@ struct Resolution {
   void print(char const * _name) const;
 
 #ifdef __CUDACC__
+  __device__ int i() const {return blockIdx.x * blockDim.x + threadIdx.x;}
+  __device__ int j() const {return blockIdx.y * blockDim.y + threadIdx.y;}
   __device__ int x() const {return blockIdx.x * blockDim.x + threadIdx.x + buffer;}
   __device__ int y() const {return blockIdx.y * blockDim.y + threadIdx.y + buffer;}
   __device__ int idx() const {return width * y() + x();}

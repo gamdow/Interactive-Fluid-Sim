@@ -1,19 +1,28 @@
 #pragma once
 
-#include <iostream>
+#include <ostream>
 #include <vector>
 
 #include <SDL2/SDL.h>
 
-struct FPS {
-  FPS(float _frame_rate);
-  void printCurrent(std::ostream & os) const;
-  void update();
+struct FormatScope {
+  FormatScope(std::ostream & os);
+  ~FormatScope();
 private:
-  void validate(float & _val);
-  float __frame_rate;
-  float __fps_max, __fps_act;
-  Uint32 __time;
+  std::ostream & __os;
+  std::ios __temp;
+};
+
+struct FPS {
+  FPS(float _fps);
+  void reportCurrent(std::ostream & os) const;
+  void updateAndDelay();
+private:
+  static void validate(float & _val, float _default);
+  static void lerp(float & _val, float _new, float _lerp);
+  float __desired, __max, __actual;
+  Uint32 __lastTicks;
+  float __remainder;
 };
 
 struct OptionBase {
@@ -22,10 +31,10 @@ struct OptionBase {
   void Update(SDL_Event const & event);
   inline void clearChangedFlag() {__changed = false;}
   inline bool hasChanged() const {return __changed;}
-  inline void printCurrent(std::ostream & os) const {printCurrentImpl(os);}
+  inline void reportCurrent(std::ostream & os) const {reportCurrentImpl(os);}
 private:
   virtual bool updateImpl(SDL_Event const & event) = 0;
-  virtual void printCurrentImpl(std::ostream & os) const = 0;
+  virtual void reportCurrentImpl(std::ostream & os) const = 0;
   char const * __name;
   bool __changed;
 };
@@ -40,7 +49,7 @@ private:
   std::string indexToName(int _i) const {return __namedVals[__cur].first;}
   T indexToVal(int _i) const {return __namedVals[__cur].second;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void printCurrentImpl(std::ostream & os) const;
+  virtual void reportCurrentImpl(std::ostream & os) const;
   typedef std::vector< std::pair<std::string, T> > Map;
   Map __namedVals;
   int __cur;
@@ -56,7 +65,7 @@ private:
   int valToIndex(T _v) const;
   T indexToVal(int _i) const {return __cur * __step + __min;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void printCurrentImpl(std::ostream & os) const;
+  virtual void reportCurrentImpl(std::ostream & os) const;
   T __min;
   int __nSteps;
   T __step;

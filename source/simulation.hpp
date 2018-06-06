@@ -10,7 +10,7 @@ struct SimulationBase {
 };
 
 struct Simulation : public SimulationBase {
-  Simulation(KernelsWrapper & _kers);
+  Simulation(KernelsWrapper & _kers, int _pressure_steps);
   virtual ~Simulation();
   void step(float2 _d, float _dt);
   void applyBoundary(float _vel);
@@ -22,7 +22,10 @@ struct Simulation : public SimulationBase {
   MirroredArray<float> __pressure;
   MirroredArray<float4> __smoke;
 private:
+  int const PRESSURE_SOLVER_STEPS;
   KernelsWrapper & __kernels;
-  float2 * __f2temp;
+  float2 * __f2tempA;
+  float2 * __f2tempB;
+  float2 * __f2tempC;
   float * __f1temp;
 };

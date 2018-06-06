@@ -11,6 +11,7 @@ struct KernelsWrapper : public OptimalBlockConfig {
   virtual ~KernelsWrapper();
   void advectVelocity(float2 * io_velocity, float2 _rdx, float _dt);
   void advectVelocity(float2 * o_velocity, float2 const * _velocity, float2 _rdx, float _dt);
+  void limitAdvection(float2 * o_e, float2 * _e1, float2 * _e2);
   template<class T> void applyAdvection(T * io_data, float2 const * _velocity, float const * _fluid, float _dt, float2 _rdx);
   void calcDivergence(float * o_divergence, float2 const * _velocity, float const * _fluid, float2 _rdx);
   void pressureDecay(float * io_pressure, float const * _fluid);
@@ -21,6 +22,7 @@ struct KernelsWrapper : public OptimalBlockConfig {
   void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _array, float _mul);
   void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array, float3 const * _map);
   void sum(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2);
+  Resolution const & resolution() const {return __buffer_res;}
   Resolution const & getBufferRes() const {return __buffer_res;}
 private:
   template<class T> TextureObject<T> & selectTextureObject() {}

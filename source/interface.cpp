@@ -1,35 +1,61 @@
 #include "interface.hpp"
 
+#include <iomanip>
+#include <iostream>
 #include <algorithm>
 #include <cmath>
 
 
-FPS::FPS(float _frame_rate)
-  : __frame_rate(_frame_rate)
-  , __fps_max(_frame_rate)
-  , __fps_act(_frame_rate)
-  , __time(SDL_GetTicks())
+FormatScope::FormatScope(std::ostream & os)
+  : __os(os)
+  , __temp(nullptr)
+{
+  __temp.copyfmt(os);
+}
+
+FormatScope::~FormatScope() {
+  __os.copyfmt(__temp);
+}
+
+FPS::FPS(float _fps)
+  : __desired(_fps)
+  , __max(_fps)
+  , __actual(_fps)
+  , __lastTicks(SDL_GetTicks())
+  , __remainder(0.f)
 {}
 
-void FPS::printCurrent(std::ostream & os) const {
-  os << "fps: " << floorf(__fps_act * 10.f) / 10.f << " (" << floorf(__fps_max * 10.f) / 10.f << ")";
+void FPS::reportCurrent(std::ostream & os) const {
+  FormatScope temp(os);
+  os.setf(std::ios::fixed, std:: ios::floatfield);
+  os.precision(1);
+  os << "fps: " << floorf(__actual * 10.f) / 10.f << " (" << floorf(__max * 10.f) / 10.f << ")";
 }
 
-void FPS::update() {
-  validate(__fps_max);
-  validate(__fps_act);
-  __fps_max = 0.99f * __fps_max + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
-  SDL_Delay(std::max(1000.0f / __frame_rate - (SDL_GetTicks() - __time), 0.0f));
-  __fps_act = 0.99f * __fps_act + 0.01f * (1000.f / std::max(SDL_GetTicks() - __time, 1u));
-  __time = SDL_GetTicks();
+void FPS::updateAndDelay() {
+  validate(__max, __desired);
+  validate(__actual, __desired);
+  auto tickDiff = SDL_GetTicks() - __lastTicks;
+  lerp(__max, 1000.f / std::max(tickDiff, 1u), 0.01f);
+  auto delay = std::max(1000.f / __desired - tickDiff + __remainder, 0.0f);
+  auto floor_delay = std::floor(delay);
+  __remainder = delay - floor_delay;
+  SDL_Delay(floor_delay);
+  auto nowTicks = SDL_GetTicks();
+  lerp(__actual, 1000.f / std::max(nowTicks - __lastTicks, 1u), 0.01f);
+  __lastTicks = nowTicks;
 }
 
-void FPS::validate(float & _val) {
+void FPS::validate(float & _val, float _default) {
   if(!std::isfinite(_val)) {
-    _val = __frame_rate;
+    _val = _default;
   } else {
     _val = std::min(std::max(_val, 0.0f), 1000.0f);
   }
+}
+
+void FPS::lerp(float & _val, float _new, float _lerp) {
+  _val = (1.f - _lerp) * _val + _lerp * _new;
 }
 
 OptionBase::OptionBase(char const * _name)
@@ -40,7 +66,7 @@ OptionBase::OptionBase(char const * _name)
 void OptionBase::Update(SDL_Event const & event) {
   if(updateImpl(event)) {
     std::cout << __name << ": ";
-    printCurrentImpl(std::cout);
+    reportCurrentImpl(std::cout);
     std::cout << std::endl;
     __changed = true;
   }
@@ -70,7 +96,7 @@ bool CycleOption<T>::updateImpl(SDL_Event const & event) {
 }
 
 template<class T>
-void CycleOption<T>::printCurrentImpl(std::ostream & os) const {
+void CycleOption<T>::reportCurrentImpl(std::ostream & os) const {
   os << indexToName(__cur) << "(" << indexToVal(__cur) << ")";
 }
 
@@ -107,7 +133,7 @@ bool RangeOption<T>::updateImpl(SDL_Event const & event) {
 }
 
 template<class T>
-void RangeOption<T>::printCurrentImpl(std::ostream & os) const {
+void RangeOption<T>::reportCurrentImpl(std::ostream & os) const {
   os << indexToVal(__cur);
 }
 

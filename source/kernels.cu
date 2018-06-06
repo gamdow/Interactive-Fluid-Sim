@@ -8,11 +8,41 @@
 
 float const PI = 3.14159265359f;
 
+template<typename T>
+__device__
+inline T lerp(T a, T b, T l) {
+  //return (1. - l) * a + l * b;
+  return fma(l, b, fma(-l, a, a));
+}
+
+__device__ inline float minmod(float a, float b) {
+  return a * b > 0
+    ? (a > 0
+      ? (a < b ? a : b)
+      : (a > b ? a : b))
+    : 0;
+}
+
+__device__ inline float2 minmod2(float2 a, float2 b) {
+  return make_float2(minmod(a.x, b.x), minmod(a.y, b.y));
+}
+
 __global__ void advect_velocity(float2 * o_velocity, cudaTextureObject_t _velocityObj, Resolution _buffer_res, float _dt, float2 _rdx) {
   float s = (float)_buffer_res.x() + 0.5f;
   float t = (float)_buffer_res.y() + 0.5f;
   float2 pos = make_float2(s, t) - _dt * _rdx * tex2D<float2>(_velocityObj, s, t);
   o_velocity[_buffer_res.idx()] = tex2D<float2>(_velocityObj, pos.x, pos.y);
+}
+
+__device__ inline float2 limit_select(float2 * _e1, float2 * _e2, int i, int j) {
+  return make_float2(_e2[j].x * _e2[j].x > _e1[j].x * _e1[j].x ? _e1[j].x : _e1[i].x, _e2[j].y * _e2[j].y > _e1[j].y * _e1[j].y ? _e1[j].y : _e1[i].y);
+}
+
+__global__ void limit_advection(float2 * o_e, float2 * _e1, float2 * _e2, Resolution _buffer_res) {
+  int4 const stencil = _buffer_res.stencil();
+  o_e[_buffer_res.idx()] = minmod2(
+    minmod2(limit_select(_e1, _e2, _buffer_res.idx(), stencil.x), limit_select(_e1, _e2, _buffer_res.idx(), stencil.y)),
+    minmod2(limit_select(_e1, _e2, _buffer_res.idx(), stencil.z), limit_select(_e1, _e2, _buffer_res.idx(), stencil.w)));
 }
 
 template<typename T>
@@ -34,8 +64,7 @@ EXPLICT_INSTATIATION(float4)
 
 __global__ void calc_divergence(float * o_divergence, float2 const * _velocity, float const * _fluid, Resolution _buffer_res, float2 _rdx) {
   int4 const stencil = _buffer_res.stencil();
-  o_divergence[_buffer_res.idx()] = (_velocity[stencil.x].x * _fluid[stencil.x] - _velocity[stencil.y].x * _fluid[stencil.y]) * (_rdx.x / 2.0f)
-    + (_velocity[stencil.z].y * _fluid[stencil.z] - _velocity[stencil.w].y * _fluid[stencil.w]) * (_rdx.y / 2.0f);
+  o_divergence[_buffer_res.idx()] = (_velocity[stencil.x].x - _velocity[stencil.y].x) * (_rdx.x / 2.0f) + (_velocity[stencil.z].y - _velocity[stencil.w].y) * (_rdx.y / 2.0f);
 }
 
 __global__ void pressure_decay(float * io_pressure, float const * _fluid, Resolution _buffer_res) {
@@ -46,19 +75,22 @@ __global__ void pressure_decay(float * io_pressure, float const * _fluid, Resolu
 __global__ void pressure_solve(float * o_pressure, float const * _pressure, float const * _divergence, float const * _fluid, Resolution _buffer_res, float2 _dx) {
   int const idx = _buffer_res.idx();
   int4 const stencil = _buffer_res.stencil();
-  o_pressure[idx] = (1.0f / 4.0f) * (
-    (4.0f - _fluid[stencil.x] - _fluid[stencil.y] - _fluid[stencil.z] - _fluid[stencil.w]) * _pressure[idx]
-    + _fluid[stencil.x] * _pressure[stencil.x]
-    + _fluid[stencil.y] * _pressure[stencil.y]
-    + _fluid[stencil.z] * _pressure[stencil.z]
-    + _fluid[stencil.w] * _pressure[stencil.w]
+  float pR = lerp(_pressure[idx], _pressure[stencil.x], _fluid[stencil.x]);
+  float pL = lerp(_pressure[idx], _pressure[stencil.y], _fluid[stencil.y]);
+  float pU = lerp(_pressure[idx], _pressure[stencil.z], _fluid[stencil.z]);
+  float pD = lerp(_pressure[idx], _pressure[stencil.w], _fluid[stencil.w]);
+  o_pressure[idx] = (1.0f / 4.0f) * (pR + pL + pU + pD
     - _divergence[idx] * _dx.x * _dx.y);
 }
 
 __global__ void sub_gradient(float2 * io_velocity, float const * _pressure, float const * _fluid, Resolution _buffer_res, float2 _rdx) {
   int const idx = _buffer_res.idx();
   int4 const stencil = _buffer_res.stencil();
-  io_velocity[idx] -= _fluid[idx] * (_rdx / 2.0f) * make_float2( _pressure[stencil.x] - _pressure[stencil.y], _pressure[stencil.z] - _pressure[stencil.w]);
+  float pR = lerp(_pressure[idx], _pressure[stencil.x], _fluid[stencil.x]);
+  float pL = lerp(_pressure[idx], _pressure[stencil.y], _fluid[stencil.y]);
+  float pU = lerp(_pressure[idx], _pressure[stencil.z], _fluid[stencil.z]);
+  float pD = lerp(_pressure[idx], _pressure[stencil.w], _fluid[stencil.w]);
+  io_velocity[idx] -= _fluid[idx] * (_rdx / 2.0f) * make_float2(pR - pL, pU - pD);
 }
 
 __global__ void enforce_slip(float2 * io_velocity, float const * _fluid, Resolution _buffer_res) {

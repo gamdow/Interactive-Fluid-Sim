@@ -16,6 +16,9 @@ struct Resolution {
   __device__ int x() const {return blockIdx.x * blockDim.x + threadIdx.x + buffer;}
   __device__ int y() const {return blockIdx.y * blockDim.y + threadIdx.y + buffer;}
   __device__ int idx() const {return width * y() + x();}
+  // __device__ int block_x() const {return blockIdx.x * blockDim.x + buffer;}
+  // __device__ int block_y() const {return blockIdx.y * blockDim.y + buffer;}
+  // __device__ int block_idx() const {return width * block_y() + block_x();}
   __device__ int4 stencil() const {return idx() + make_int4(1, -1, width, -width);}
 #endif
   int width, height, buffer, size;

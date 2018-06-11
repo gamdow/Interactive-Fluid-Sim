@@ -2,11 +2,15 @@
 
 #include <cuda_runtime.h>
 
+#include "../debug.hpp"
 #include "../cuda/utility.cuh"
 #include "../data_structs/resolution.cuh"
 
 // Wrapper for the simulation kernels that ensures the necessary CUDA resources are available and all the dimensions are consistent.
-struct KernelsWrapper : public OptimalBlockConfig {
+struct KernelsWrapper
+  : public Debug<KernelsWrapper>
+  , public OptimalBlockConfig
+{
   KernelsWrapper(Resolution const & _res, int _buffer_width);
   virtual ~KernelsWrapper();
   void advectVelocity(float2 * io_velocity, float2 _rdx, float _dt);
@@ -23,13 +27,17 @@ struct KernelsWrapper : public OptimalBlockConfig {
   void hsv2rgba(float4 * o_buffer, float2 const * _buffer, float _power);
   void float42rgba(float4 * o_buffer, float4 const * _buffer, float3 const * _map);
   void copyToSurface(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array);
-  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _array, float _mul);
-  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _array, float _mul);
-  // void array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _array, float3 const * _map);
+  void copyToArray(float * o_buffer, uchar3 const * _buffer, Resolution const & _in_res);
   Resolution const & resolution() const {return __buffer_res;}
   Resolution const & getBufferRes() const {return __buffer_res;}
+  void minMaxReduce(float4 & o_min, float4 & o_max, float4 const * _array);
+  void scale(float4 * o_array, float4 _min, float4 _max);
+
 private:
   template<class T> TextureObject<T> & selectTextureObject() {}
+  DeviceArray<float4> __f4reduce;
+  MirroredArray<float4> __min;
+  MirroredArray<float4> __max;
   Resolution __buffer_res;
   TextureObject<float> __f1Object;
   TextureObject<float2> __f2Object;

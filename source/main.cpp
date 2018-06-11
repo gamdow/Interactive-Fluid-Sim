@@ -1,16 +1,8 @@
-// #include <cuda_gl_interop.h>
 #include <cuda_runtime.h>
-// #include <SDL2/SDL_opengl.h>
-// #include <SDL2/SDL.h>
-// #include <SDL2/SDL_ttf.h>
 
-// #include <algorithm>
 #include <iostream>
-// #include <vector>
 #include <iomanip>
-// #include <cmath>
 
-// #include "cuda/helper_math.h"
 #include "data_structs/resolution.cuh"
 #include "data_structs/managed_array.cuh"
 #include "kernels/kernels_wrapper.cuh"
@@ -36,12 +28,13 @@ int main(int argc, char * argv[]) {
   std::cout << std::endl;
   KernelsWrapper kernels(RESOLUTION, BUFFER);
   std::cout << std::endl;
-  Simulation sim(kernels, PRESSURE_SOLVER_STEPS);
+  LBFECCSimulation sim(kernels, PRESSURE_SOLVER_STEPS);
   std::cout << std::endl;
   Camera * camera = nullptr;
   try {
     camera = new CVCamera(VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
   } catch (std::exception const & e) {
+    std::cout << e.what() << std::endl << std::endl;
     delete camera;
     camera = new NullCamera(RESOLUTION);
   }
@@ -52,7 +45,7 @@ int main(int argc, char * argv[]) {
   std::cout << "dx = " << DX.x << "," << DX.y << " Max Velocity = " << LENGTH.y / 2.0f * SIM_STEPS_PER_FRAME / FRAME_RATE;
   std::cout << std::endl;
 
-  //MirroredArray<uchar3> camera_frame(kernels.getSimBufferSpec().size);
+  DeviceArray<uchar3> camera_frame(camera->resolution().size);
 
   std::vector<OptionBase*> options;
   RangeOption<float> vel_multiplier("Velocity Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_r, SDLK_f);
@@ -123,16 +116,15 @@ int main(int argc, char * argv[]) {
 
     renderer.getBackground().bindTexture(camera->data());
 
+    checkCudaErrors(cudaMemcpy(camera_frame, camera->data().data, camera_frame.getSizeBytes(), cudaMemcpyHostToDevice));
+    kernels.copyToArray(sim.__fluidCells.device(), camera_frame, camera->resolution());
+
     sim.applyBoundary(vel_multiplier);
     sim.applySmoke();
     for(int i = 0; i < SIM_STEPS_PER_FRAME; ++i) {
       float2 const dx = make_float2(LENGTH.x / RESOLUTION.width, LENGTH.y / RESOLUTION.height);
       sim.step(mode, DX, 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE), vis_multiplier);
     }
-
-    // sim.__velocity.copyDeviceToHost();
-    // sim.__divergence.copyDeviceToHost();
-    // sim.__pressure.copyDeviceToHost();
 
     fps.updateAndDelay();
   }

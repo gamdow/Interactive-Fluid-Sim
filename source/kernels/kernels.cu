@@ -158,6 +158,11 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
   surf2Dwrite(_buffer[_buffer_res.idx()], o_surface, (_buffer_res.x() + buffer_diff) * sizeof(float4), _buffer_res.y() + buffer_diff);
 }
 
+__global__ void copy_to_array(float * o_buffer, Resolution _out_res, uchar3 const * _buffer, Resolution _in_res) {
+  uchar3 const & in = _buffer[_in_res.idx()];
+  o_buffer[_out_res.idx()] = (float)(in.x + in.y + in.z) / (256.0f * 3.0f) > 0.5f ? 0.0f : 1.0f;
+}
+
 __global__ void sum_arrays(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2, Resolution _buffer_res) {
   int const idx = _buffer_res.idx();
   o_array[idx] = _c1 * _array1[idx] + _c2 * _array2[idx];
@@ -176,7 +181,7 @@ __device__ inline float2 minmod2(float2 a, float2 b) {
 }
 
 __device__ inline float2 limit_select(float2 * _e1, float2 * _e2, int i, int j) {
-  return make_float2(_e2[j].x * _e2[j].x > _e1[j].x * _e1[j].x ? _e1[j].x : _e1[i].x, _e2[j].y * _e2[j].y > _e1[j].y * _e1[j].y ? _e1[j].y : _e1[i].y);
+  return make_float2(_e2[j].x * _e2[j].x > _e1[j].x * _e1[j].x ? _e1[i].x : _e1[j].x, _e2[j].y * _e2[j].y > _e1[j].y * _e1[j].y ? _e1[i].y : _e1[j].y);
 }
 
 __global__ void limit_advection(float2 * o_e, float2 * _e1, float2 * _e2, Resolution _buffer_res) {
@@ -186,13 +191,33 @@ __global__ void limit_advection(float2 * o_e, float2 * _e1, float2 * _e2, Resolu
     minmod2(limit_select(_e1, _e2, _buffer_res.idx(), stencil.z), limit_select(_e1, _e2, _buffer_res.idx(), stencil.w)));
 }
 
-// // Ax = b
-// __global__ void jacobi_solve(float * _b, float * _validCells, Resolution _buffer_res, float alpha, float beta, float * _x, float * o_x) {
-//   int const idx = _buffer_res.idx();
-//   int4 const stencil = _buffer_res.stencil();
-//   float xL = _validCells[stencil.y] > 0 ? _x[stencil.y] : _x[idx];
-//   float xR = _validCells[stencil.x] > 0 ? _x[stencil.x] : _x[idx];
-//   float xB = _validCells[stencil.w] > 0 ? _x[stencil.w] : _x[idx];
-//   float xT = _validCells[stencil.z] > 0 ? _x[stencil.z] : _x[idx];
-//   o_x[idx] = beta * (xL + xR + xB + xT + alpha * _b[idx]);
-// }
+__global__ void min(float4 * o, float4 const * i, Resolution _buffer_res) {
+  __shared__ float4 min_per_block;
+  if(threadIdx.x == 0 && threadIdx.y == 0) {
+    min_per_block = i[_buffer_res.idx()];
+  }
+  __syncthreads();
+  min_per_block = fminf(min_per_block, i[_buffer_res.idx()]);
+  __syncthreads();
+  if(threadIdx.x == 0 && threadIdx.y == 0) {
+    o[gridDim.x * blockIdx.y + blockIdx.x] = min_per_block;
+  }
+}
+
+__global__ void max(float4 * o, float4 const * i, Resolution _buffer_res) {
+  __shared__ float4 min_per_block;
+  if(threadIdx.x == 0 && threadIdx.y == 0) {
+    min_per_block = i[_buffer_res.idx()];
+  }
+  __syncthreads();
+  min_per_block = fmaxf(min_per_block, i[_buffer_res.idx()]);
+  __syncthreads();
+  if(threadIdx.x == 0 && threadIdx.y == 0) {
+    o[gridDim.x * blockIdx.y + blockIdx.x] = min_per_block;
+  }
+}
+
+__global__ void scaleRGB(float4 * io, float4 _min, float4 _max, Resolution _buffer_res) {
+  int const idx = _buffer_res.idx();
+  io[idx] = (io[idx] - _min) / (_max - _min);
+}

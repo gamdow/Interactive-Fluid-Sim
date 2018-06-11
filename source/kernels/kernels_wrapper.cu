@@ -5,9 +5,12 @@
 #include "kernels.cuh"
 
 KernelsWrapper::KernelsWrapper(Resolution const & _res, int _buffer_width)
-  : OptimalBlockConfig(_res)
+  : Debug<KernelsWrapper>("Constructing Kernel Device Buffers:")
+  , OptimalBlockConfig(_res)
+  , __f4reduce(grid.x * grid.y)
+  , __min(1)
+  , __max(1)
 {
-  std::cout << std::endl << "Constructing Kernel Device Buffers:" << std::endl;
   __buffer_res = Resolution(optimal_res, _buffer_width);
   __buffer_res.print("\tResolution");
   __f1Object.init(__buffer_res);
@@ -91,18 +94,25 @@ void KernelsWrapper::copyToSurface(cudaSurfaceObject_t o_surface, Resolution con
   copy_to_surface<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res);
 }
 
-// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, float _multiplier) {
-//   d_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _multiplier);
-// }
-//
-// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float2 const * _buffer, float _power) {
-//   hsv_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _power);
-// }
-//
-// void KernelsWrapper::array2rgba(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, float3 const * _map) {
-//   float4_to_rgba<<<grid,block>>>(o_surface, _surface_res, _buffer, __buffer_res, _map);
-// }
+void KernelsWrapper::copyToArray(float * o_buffer, uchar3 const * _buffer, Resolution const & _in_res) {
+  copy_to_array<<<grid,block>>>(o_buffer, __buffer_res, _buffer, _in_res);
+}
 
 void KernelsWrapper::sum(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2) {
   sum_arrays<<<grid,block>>>(o_array, _c1, _array1, _c2, _array2, __buffer_res);
+}
+
+void KernelsWrapper::minMaxReduce(float4 & o_min, float4 & o_max, float4 const * _array) {
+  min<<<grid, block>>>(__f4reduce, _array, __buffer_res);
+  min<<<1, grid>>>(__min.device(), __f4reduce, Resolution(grid.x, grid.y, 0));
+  __min.copyDeviceToHost();
+  o_min = __min[0];
+  max<<<grid, block>>>(__f4reduce, _array, __buffer_res);
+  max<<<1, grid>>>(__max.device(), __f4reduce, Resolution(grid.x, grid.y, 0));
+  __max.copyDeviceToHost();
+  o_max = __max[0];
+}
+
+void KernelsWrapper::scale(float4 * o_array, float4 _min, float4 _max) {
+  scaleRGB<<<grid, block>>>(o_array, _min, _max, __buffer_res);
 }

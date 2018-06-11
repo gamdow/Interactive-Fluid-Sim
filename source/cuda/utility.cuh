@@ -14,7 +14,8 @@
   TYPED_MACRO(float) \
   TYPED_MACRO(float2) \
   TYPED_MACRO(float3) \
-  TYPED_MACRO(float4)
+  TYPED_MACRO(float4) \
+  TYPED_MACRO(uchar3)
 
 void reportCudaCapability();
 
@@ -31,3 +32,5 @@ struct OptimalBlockConfig {
   Resolution optimal_res;
   dim3 block, grid;
 };
+
+void print(std::ostream & _out, float4 _v);

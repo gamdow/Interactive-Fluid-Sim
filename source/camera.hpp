@@ -4,6 +4,7 @@
 #include <ostream>
 #include <thread>
 
+#include "debug.hpp"
 #include "component.hpp"
 #include "data_structs/resolution.cuh"
 
@@ -15,7 +16,7 @@ private:
   virtual Resolution __resolution() const = 0;
 };
 
-struct CVCamera : public Camera {
+struct CVCamera : public Debug<CVCamera>, public Camera {
   CVCamera(int _index, Resolution _res, float _fps);
 private:
   void setCameraProps(Resolution _res, float _fps);
@@ -27,7 +28,7 @@ private:
   std::thread __capture;
 };
 
-struct NullCamera : public Camera {
+struct NullCamera : public Debug<NullCamera>, public Camera {
   NullCamera(Resolution _res);
 private:
   virtual cv::Mat const & __data() const {return __frame;}

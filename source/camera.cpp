@@ -11,16 +11,17 @@ void capture(cv::VideoCapture & _camera, cv::Mat & _mat) {
 }
 
 CVCamera::CVCamera(int _index, Resolution _res, float _fps)
-  : __camera(_index)
+  : Debug<CVCamera>("OpenCV Camera:")
+  , __camera(_index)
 {
   if(!__camera.isOpened()) {
-    std::stringstream error; error << "OpenCV: Cannot open video camera (id:" << _index << ")";
+    std::stringstream error; error << "\tCannot open video camera (id:" << _index << ")";
     throwFailure(error.str());
   }
-  std::cout << "OpenCV: Video camera found (id:" << _index << ")" << std::endl;
+  std::cout << "\tVideo camera found (id:" << _index << ")" << std::endl;
   setCameraProps(_res, _fps);
   if(!__camera.read(__frame)) {
-    std::stringstream error; error << "OpenCV: Could not capture frame";
+    std::stringstream error; error << "\tCould not capture frame";
     throwFailure(error.str());
   }
   reportFrameInfo(std::cout);
@@ -45,7 +46,8 @@ void CVCamera::reportFrameInfo(std::ostream & _out) {
 }
 
 NullCamera::NullCamera(Resolution _res)
-  : __res(_res)
+  : Debug<NullCamera>("Null Camera:")
+  , __res(_res)
   , __frame(cv::Mat::zeros(_res.width, _res.height, CV_8UC3))
 {
 }

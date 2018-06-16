@@ -1,17 +1,10 @@
 #pragma once
 
-#include <ostream>
+//#include <ostream>
 #include <vector>
-
 #include <SDL2/SDL.h>
 
-struct FormatScope {
-  FormatScope(std::ostream & os);
-  ~FormatScope();
-private:
-  std::ostream & __os;
-  std::ios __temp;
-};
+#include "renderer.hpp"
 
 struct FPS {
   FPS(float _fps);
@@ -72,4 +65,26 @@ private:
   int __cur;
   SDL_Keycode __up;
   SDL_Keycode __down;
+};
+
+struct Interface : public Renderable {
+  Interface(OpenGL & _opengl, float _fps);
+  void resetFlags();
+  void updateInputs(SDL_Event const & event);
+  void updateAndDelay() {__fps.updateAndDelay();}
+  float velocity() const {return __vel_multiplier;}
+  float magnification() const {return __magnification;}
+  float2 offset() const {return make_float2(__offset_y, __offset_y) * (__magnification - 1.0f);}
+  int mode() const {return __mode;}
+private:
+  virtual void __render(Resolution const & _window_res, float _mag, float2 _off);
+  OpenGL & __opengl;
+  FPS __fps;
+  TextRenderQuad __quad;
+  RangeOption<float> __vel_multiplier;
+  RangeOption<float> __magnification;
+  RangeOption<float> __offset_x;
+  RangeOption<float> __offset_y;
+  CycleOption<int> __mode;
+  std::vector<OptionBase*> __options;
 };

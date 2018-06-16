@@ -2,16 +2,13 @@
 
 #include <cuda_runtime.h>
 
-#include "../debug.hpp"
+#include "../data/resolution.cuh"
 #include "../cuda/utility.cuh"
-#include "../data_structs/resolution.cuh"
 
 // Wrapper for the simulation kernels that ensures the necessary CUDA resources are available and all the dimensions are consistent.
 struct KernelsWrapper
-  : public Debug<KernelsWrapper>
-  , public OptimalBlockConfig
 {
-  KernelsWrapper(Resolution const & _res, int _buffer_width);
+  KernelsWrapper(OptimalBlockConfig const & _block_config, int _buffer_width);
   virtual ~KernelsWrapper();
   void advectVelocity(float2 * io_velocity, float2 _rdx, float _dt);
   void advectVelocity(float2 * o_velocity, float2 const * _velocity, float2 _rdx, float _dt);
@@ -32,13 +29,12 @@ struct KernelsWrapper
   Resolution const & getBufferRes() const {return __buffer_res;}
   void minMaxReduce(float4 & o_min, float4 & o_max, float4 const * _array);
   void scale(float4 * o_array, float4 _min, float4 _max);
-
 private:
   template<class T> TextureObject<T> & selectTextureObject() {}
-  DeviceArray<float4> __f4reduce;
-  MirroredArray<float4> __min;
-  MirroredArray<float4> __max;
+  dim3 __grid_dim, __block_dim;
   Resolution __buffer_res;
+  DeviceArray<float4> __f4reduce;
+  MirroredArray<float4> __min, __max;
   TextureObject<float> __f1Object;
   TextureObject<float2> __f2Object;
   TextureObject<float4> __f4Object;

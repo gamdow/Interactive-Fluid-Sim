@@ -2,9 +2,8 @@
 
 #include <cuda_runtime.h>
 
-#include "debug.hpp"
-#include "data_structs/managed_array.cuh"
-#include "kernels/kernels_wrapper.cuh"
+#include "renderer.hpp"
+#include "data/managed_array.cuh"
 
 enum Mode : int {
   smoke = 0,
@@ -14,14 +13,16 @@ enum Mode : int {
   fluid
 };
 
-struct Simulation : public Debug<Simulation> {
-  Simulation(KernelsWrapper & _kers, int _pressure_steps);
+struct Interface;
+struct KernelsWrapper;
+
+struct Simulation : public Renderable {
+  Simulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps);
   virtual ~Simulation();
-  void step(Mode _mode, float2 _d, float _dt, float _mul);
-  void applyBoundary(float _vel);
+  void step(float2 _d, float _dt);
+  void applyBoundary();
   void applySmoke();
   void reset();
-  DeviceArray<float4> __f4temp;
   MirroredArray<float> __fluidCells;
 protected:
   KernelsWrapper & __kernels;
@@ -32,21 +33,25 @@ protected:
   MirroredArray<float3> __color_map;
 private:
   virtual void advectVelocity(float2 _rd, float _dt);
+  virtual void __render(Resolution const & _window_res, float _mag, float2 _off);
+  Interface & __interface;
   int const PRESSURE_SOLVER_STEPS;
-  DeviceArray<float> __f1temp;
   float __min_rgb;
   float __max_rgb;
+  DeviceArray<float4> __f4temp;
+  DeviceArray<float> __f1temp;
+  SurfaceRenderQuad __quad;
 };
 
 struct BFECCSimulation : public Simulation {
-  BFECCSimulation(KernelsWrapper & _kers, int _pressure_steps);
+  BFECCSimulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps);
 private:
   virtual void advectVelocity(float2 _rd, float _dt);
   DeviceArray<float2> __f2temp;
 };
 
 struct LBFECCSimulation : public Simulation {
-  LBFECCSimulation(KernelsWrapper & _kers, int _pressure_steps);
+  LBFECCSimulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps);
 private:
   virtual void advectVelocity(float2 _rd, float _dt);
   DeviceArray<float2> __f2tempA;

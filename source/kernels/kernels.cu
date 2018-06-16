@@ -159,8 +159,12 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
 }
 
 __global__ void copy_to_array(float * o_buffer, Resolution _out_res, uchar3 const * _buffer, Resolution _in_res) {
-  uchar3 const & in = _buffer[_in_res.idx()];
-  o_buffer[_out_res.idx()] = (float)(in.x + in.y + in.z) / (256.0f * 3.0f) > 0.5f ? 0.0f : 1.0f;
+  int x = (_out_res.width - _in_res.width) / 2 + _out_res.x();
+  int y = (_out_res.height - _in_res.height) / 2 + _out_res.y();
+  if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
+    uchar3 const & in = _buffer[x + y * _in_res.width];
+    o_buffer[_out_res.idx()] = (float)(in.x + in.y + in.z) / (255.0f * 3.0f) > 0.5f ? 0.0f : 1.0f;
+  }
 }
 
 __global__ void sum_arrays(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2, Resolution _buffer_res) {

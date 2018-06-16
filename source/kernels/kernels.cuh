@@ -2,7 +2,7 @@
 
 #include <cuda_runtime.h>
 
-#include "../data_structs/resolution.cuh"
+#include "../data/resolution.cuh"
 
 __global__ void advect_velocity(float2 * o_velocity, cudaTextureObject_t _velocityObj, Resolution _buffer_res, float _dt, float2 _rdx);
 

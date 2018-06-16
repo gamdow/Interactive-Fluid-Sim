@@ -5,27 +5,35 @@
 
 #include "../cuda/helper_cuda.h"
 
-RenderQuad::RenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
+RenderQuad::RenderQuad(GLint _internal, GLenum _format, GLenum _type)
   : __id(0u)
-  , __resolution(_res)
   , __internal(_internal)
   , __format(_format)
   , __type(_type)
 {
-  for(int i = 0; i < 1000000; ++i) {
-    int j = i;
-    ++j;
-  }
   verts[0] = make_float4(-1.f, 1.f, 0.f, 0.f);
   verts[1] = make_float4(1.f, 1.f, 1.f, 0.f);
   verts[2] = make_float4(1.f, -1.f, 1.f, 1.f);
   verts[3] = make_float4(-1.f, -1.f, 0.f, 1.f);
   glGenTextures(1, &__id);
+  assert(__id != 0);
   std::cout << "\tglGenTextures: " << __id << std::endl;
 }
 
 void RenderQuad::render(Resolution _window_res, float _mag, float2 _off) {
   updateQuad(_window_res, _mag, _off);
+  glBindTexture(GL_TEXTURE_2D, __id); {
+    glBegin(GL_QUADS); {
+      for(int i = 0; i < 4; ++i) {
+        float4 const & vert = verts[i];
+        glTexCoord2f(vert.z, vert.w); glVertex2f(vert.x, vert.y);
+      }
+    } glEnd();
+  } glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void RenderQuad::render(Resolution const & _quad_res, Resolution const & _window_res, float _mag, float2 _off) {
+  updateQuad(_quad_res, _window_res, _mag, _off);
   glBindTexture(GL_TEXTURE_2D, __id); {
     glBegin(GL_QUADS); {
       for(int i = 0; i < 4; ++i) {
@@ -55,11 +63,19 @@ void RenderQuad::updateQuad(Resolution _window_res, float _mag, float2 _off) {
   }
 }
 
+void RenderQuad::updateQuad(Resolution const & _quad_res, Resolution const & _window_res, float _mag, float2 _off) {
+  for(int i = 0; i < num_verts; ++i) {
+    verts[i].x = (verts[i].z * 2.f - 1.f) * _mag * static_cast<float>(_quad_res.width) / static_cast<float>(_window_res.width) - _off.x;
+    verts[i].y = (1.f - verts[i].w * 2.f) * _mag * static_cast<float>(_quad_res.height) / static_cast<float>(_window_res.height) + _off.y;
+  }
+}
+
 SurfaceRenderQuad::SurfaceRenderQuad(KernelsWrapper & _kers, Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
-  : RenderQuad(_res, _internal, _format, _type)
+  : RenderQuad(_internal, _format, _type)
   , __kernels(_kers)
   , __surface(nullptr)
 {
+  setResolution(_res);
   _res.print("\t\tResolution");
   bindTexture(resolution().width, resolution().height, nullptr);
   checkCudaErrors(cudaGraphicsGLRegisterImage(&__surface, id(), GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
@@ -90,7 +106,7 @@ void SurfaceRenderQuad::copyToSurface(float4 * _array) {
 }
 
 TextRenderQuad::TextRenderQuad()
-  : RenderQuad(Resolution(), GL_RGBA, GL_BGRA, GL_UNSIGNED_BYTE)
+  : RenderQuad(GL_RGBA, GL_BGRA, GL_UNSIGNED_BYTE)
   , __surface(nullptr)
 {
 }

@@ -1,31 +1,42 @@
 #include "simulation.hpp"
 
 #include <iostream>
-#include <typeinfo>
+#include <cuda_gl_interop.h>
+//#include <typeinfo>
 
+#include "debug.hpp"
 #include "cuda/helper_math.h"
 #include "cuda/helper_cuda.h"
+#include "interface.hpp"
 #include "kernels/kernels_wrapper.cuh"
 
 void lerp(float & _from, float _to) {
   _from = _to * 0.05f + _from * 0.95f;
 }
 
-Simulation::Simulation(KernelsWrapper & _kers, int _pressure_steps)
-  : Debug<Simulation>("Constructing Simluation Device Buffers:")
+Simulation::Simulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps)
+  : __interface(_interface)
   , PRESSURE_SOLVER_STEPS(_pressure_steps)
-  , __f4temp(_kers.getBufferRes().size)
   , __kernels(_kers)
-  , __velocity(_kers.getBufferRes().size)
-  , __fluidCells(_kers.getBufferRes().size)
-  , __divergence(_kers.getBufferRes().size)
-  , __pressure(_kers.getBufferRes().size)
-  , __smoke(_kers.getBufferRes().size)
-  , __color_map(4)
-  , __f1temp(_kers.getBufferRes().size)
   , __min_rgb(0.0f)
   , __max_rgb(1.0f)
+  , __quad(_kers, _kers.resolution(), GL_RGBA32F, GL_RGBA, GL_FLOAT)
 {
+  format_out << "Constructing Simluation Device Buffers:" << std::endl;
+  OutputIndent indent1;
+  _kers.getBufferRes().print("Resolution");
+  {
+    Allocator alloc;
+    __f4temp.resize(alloc, _kers.getBufferRes().size);
+    __velocity.resize(alloc, _kers.getBufferRes().size);
+    __fluidCells.resize(alloc, _kers.getBufferRes().size);
+    __divergence.resize(alloc, _kers.getBufferRes().size);
+    __pressure.resize(alloc, _kers.getBufferRes().size);
+    __smoke.resize(alloc, _kers.getBufferRes().size);
+    __color_map.resize(alloc, 4);
+    __f1temp.resize(alloc, _kers.getBufferRes().size);
+  }
+
   reset();
 
   __color_map[0] = make_float3(1.0f, 0.5f, 0.5f) * 0.5f; // red
@@ -33,10 +44,6 @@ Simulation::Simulation(KernelsWrapper & _kers, int _pressure_steps)
   __color_map[2] = make_float3(0.3f, 1.0f, 0.6f) * 0.5f;
   __color_map[3] = make_float3(0.5f, 0.5f, 0.5f) * 0.5f;
   __color_map.copyHostToDevice();
-
-  // _kers.getBufferRes().print("\tResolution");
-  //
-  // std::cout << "\tTotal: " << __velocity.getSizeBytes() + __fluidCells.getSizeBytes() + __divergence.getSizeBytes() + __pressure.getSizeBytes() + __smoke.getSizeBytes() + __kernels.getBufferRes().size * (sizeof(float) + sizeof(float2)) << " bytes" << std::endl;
 }
 
 Simulation::~Simulation() {
@@ -46,9 +53,9 @@ void Simulation::advectVelocity(float2 _rd, float _dt) {
   __kernels.advectVelocity(__velocity.device(), _rd, _dt);
 }
 
-void Simulation::step(Mode _mode, float2 _d, float _dt, float _mul) {
+void Simulation::step(float2 _d, float _dt) {
 
-  switch(_mode) {
+  switch(__interface.mode()) {
     case Mode::smoke:
       __kernels.float42rgba(__f4temp, __smoke.device(), __color_map.device()); break;
     case Mode::velocity:
@@ -84,15 +91,16 @@ void Simulation::step(Mode _mode, float2 _d, float _dt, float _mul) {
   __kernels.applyAdvection(__smoke.device(), __velocity.device(), __fluidCells.device(), _dt, rd);
 }
 
-void Simulation::applyBoundary(float _vel) {
+void Simulation::applyBoundary() {
   __velocity.copyDeviceToHost();
+  float velocity = __interface.velocity();
   Resolution const & buffer_res = __kernels.getBufferRes();
   for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
     for(int i = 0; i < buffer_res.buffer * 2; ++i) {
-      __velocity[i + j * buffer_res.width] = make_float2(_vel, 0.f);
+      __velocity[i + j * buffer_res.width] = make_float2(velocity, 0.f);
     }
     for(int i = buffer_res.width - buffer_res.buffer * 2; i < buffer_res.width; ++i) {
-      __velocity[i + j * buffer_res.width] = make_float2(_vel, 0.f);
+      __velocity[i + j * buffer_res.width] = make_float2(velocity, 0.f);
     }
   }
   for(int i = 0; i < buffer_res.width; ++i) {
@@ -141,37 +149,6 @@ void Simulation::reset() {
     }
   }
 
-  // for(int i = 0; i < buffer_res.width; ++i) {
-  //   for(int j = 0; j < buffer_res.height; ++j) {
-  //     if(i >= buffer_res.buffer + 20 && i < buffer_res.buffer + 40 && j >= buffer_res.buffer + 10 && j < buffer_res.buffer + 20) {
-  //       __fluidCells[i + j * buffer_res.width] = 0.0f;
-  //     }
-  //   }
-  // }
-
-  // for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
-  //   for(int i = 0; i < buffer_res.buffer; ++i) {
-  //     __fluidCells[i + j * buffer_res.width] = 0.0f;
-  //   }
-  //   for(int i = buffer_res.width - buffer_res.buffer; i < buffer_res.width; ++i) {
-  //     __fluidCells[i + j * buffer_res.width] = 0.0f;
-  //   }
-  // }
-
-  // for(int k = 2; k < 3; ++k) {
-  //   int odd = k % 2;
-  //   for(int l = 1; l < 2 + odd; ++l) {
-  //     float2 center = make_float2(k * 80 - 2.5f * 80.f + buffer_res.width / 2, l * 80 - 2.5f * 80.f + 100 - 40 * odd + buffer_res.height / 2);
-  //     for(int i = 0; i < buffer_res.width; ++i) {
-  //       for(int j = 0; j < buffer_res.height; ++j) {
-  //         if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 5000) {
-  //           __fluidCells[i + j * buffer_res.width] = 0.0f;
-  //         }
-  //       }
-  //     }
-  //   }
-  // }
-
   for(int i = 0; i < buffer_res.width; ++i) {
     for(int j = 0; j < buffer_res.buffer; ++j) {
       __fluidCells[i + j * buffer_res.width] = 0.0f;
@@ -183,12 +160,39 @@ void Simulation::reset() {
   __fluidCells.copyHostToDevice();
 }
 
+void Simulation::__render(Resolution const & _window_res, float _mag, float2 _off) {
+  __quad.copyToSurface(__f4temp);
+  __quad.render(__kernels.resolution(), _window_res, _mag, _off);
+}
+
+BFECCSimulation::BFECCSimulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps)
+  : Simulation(_interface, _kers, _pressure_steps)
+{
+  OutputIndent indent1;
+  {
+    Allocator alloc;
+    __f2temp.resize(alloc, _kers.getBufferRes().size);
+  }
+}
+
 void BFECCSimulation::advectVelocity(float2 _rd, float _dt) {
   // Backwards-Forwards Error Compensation & Correction (BFECC). Only stable for low V
   __kernels.advectVelocity(__f2temp, __velocity.device(), _rd, _dt);
   __kernels.advectVelocity(__f2temp, _rd, -_dt);
   __kernels.sum(__velocity.device(), 1.5f, __velocity.device(), -.5f, __f2temp);
   __kernels.advectVelocity(__velocity.device(), _rd, _dt);
+}
+
+LBFECCSimulation::LBFECCSimulation(Interface & _interface, KernelsWrapper & _kers, int _pressure_steps)
+  : Simulation(_interface, _kers, _pressure_steps)
+{
+  OutputIndent indent1;
+  {
+    Allocator alloc;
+    __f2tempA.resize(alloc, _kers.getBufferRes().size);
+    __f2tempB.resize(alloc, _kers.getBufferRes().size);
+    __f2tempC.resize(alloc, _kers.getBufferRes().size);
+  }
 }
 
 void LBFECCSimulation::advectVelocity(float2 _rd, float _dt) {
@@ -204,18 +208,4 @@ void LBFECCSimulation::advectVelocity(float2 _rd, float _dt) {
   __kernels.limitAdvection(__f2tempC, __f2tempB, __f2tempA);
   __kernels.sum(__velocity.device(), 1.0f, __velocity.device(), 1.0f, __f2tempC);
   __kernels.advectVelocity(__velocity.device(), _rd, _dt);
-}
-
-BFECCSimulation::BFECCSimulation(KernelsWrapper & _kers, int _pressure_steps)
-  : Simulation(_kers, _pressure_steps)
-  , __f2temp(_kers.getBufferRes().size)
-{
-}
-
-LBFECCSimulation::LBFECCSimulation(KernelsWrapper & _kers, int _pressure_steps)
-  : Simulation(_kers, _pressure_steps)
-  , __f2tempA(_kers.getBufferRes().size)
-  , __f2tempB(_kers.getBufferRes().size)
-  , __f2tempC(_kers.getBufferRes().size)
-{
 }

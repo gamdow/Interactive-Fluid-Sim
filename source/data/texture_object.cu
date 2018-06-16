@@ -8,20 +8,16 @@
 
 template<class T>
 TextureObject<T>::TextureObject()
-  : __buffer(nullptr)
-  , __pitch(0u)
-  , __object(0u)
+  : __object(0u)
 {}
 
 template<class T>
-void TextureObject<T>::init(Resolution const & _res) {
-  std::cout << "\tcudaMallocPitch(" << typeid(T).name() << "): ";
-  checkCudaErrors(cudaMallocPitch(&__buffer, &__pitch, sizeof(T) * _res.width, _res.height));
-  std::cout << _res.height * __pitch << " bytes (" << __buffer << ")" << std::endl;
+void TextureObject<T>::init(Allocator & _alloc, Resolution const & _res) {
+  __array.resize(_alloc, _res.width, _res.height);
   cudaResourceDesc resDesc; memset(&resDesc, 0, sizeof(resDesc));
   resDesc.resType = cudaResourceTypePitch2D;
-  resDesc.res.pitch2D.devPtr = __buffer;
-  resDesc.res.pitch2D.pitchInBytes = __pitch;
+  resDesc.res.pitch2D.devPtr = __array.getData();
+  resDesc.res.pitch2D.pitchInBytes = __array.getPitch();
   resDesc.res.pitch2D.width = _res.width;
   resDesc.res.pitch2D.height = _res.height;
   resDesc.res.pitch2D.desc = cudaCreateChannelDesc<T>();
@@ -36,7 +32,6 @@ void TextureObject<T>::init(Resolution const & _res) {
 template<class T>
 void TextureObject<T>::shutdown() {
   checkCudaErrors(cudaDestroyTextureObject(__object));
-  checkCudaErrors(cudaFree(__buffer));
 }
 
 #define EXPLICT_INSTATIATION(TYPED_MACRO) \

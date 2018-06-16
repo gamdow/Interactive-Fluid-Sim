@@ -1,41 +1,25 @@
 #pragma once
 
-#include <cuda_runtime.h>
-#include <SDL2/SDL_opengl.h>
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
-#include <opencv2/opencv.hpp>
+#include "data/render_quad.hpp"
 
-#include "data_structs/render_quad.hpp"
-#include "component.hpp"
-#include "data_structs/resolution.cuh"
-#include "camera.hpp"
-#include "kernels/kernels_wrapper.cuh"
+struct Resolution;
 
-struct OpenGLInitialiser: public Component {
-  OpenGLInitialiser(Resolution _res);
-  virtual ~OpenGLInitialiser();
-  void swapWindow() {SDL_GL_SwapWindow(__window);}
-  TTF_Font * getFont() {return __font;}
+struct Renderable {
+  void render(Resolution const & _window_res, float _mag, float2 _off) {__render(_window_res, _mag, _off);}
 private:
-  void ReportFailure() const;
-  SDL_Window * __window;
-  SDL_GLContext __context;
-  TTF_Font * __font;
+  virtual void __render(Resolution const & _window_res, float _mag, float2 _off) = 0;
 };
 
-struct Renderer : public OpenGLInitialiser {
-  Renderer(Resolution _res, Camera & _cam, KernelsWrapper & _kers);
-  ~Renderer();
-  void setText(char const * _val) {__text.setText(getFont(), _val);}
-  void render(float _mag, float2 _off);
-  template<typename ARRAY, typename MULTIPLIER> void copyToSurface(ARRAY * _array, MULTIPLIER _mul);
-  RenderQuad & getBackground() {return __background;}
-  SurfaceRenderQuad & getVisualisation() {return __visualisation;}
+struct OpenGL;
+struct Interface;
+
+struct Renderer {
+  Renderer(OpenGL & _opengl, Renderable & _camera, Renderable & _simulation, Interface & _interface);
+  void render();
 private:
-  Resolution __windowRes;
-  KernelsWrapper & __kernels;
-  RenderQuad __background;
-  SurfaceRenderQuad __visualisation;
+  OpenGL & __opengl;
+  Renderable & __camera;
+  Renderable & __simulation;
+  Interface & __interface;
   TextRenderQuad __text;
 };

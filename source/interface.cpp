@@ -6,18 +6,22 @@
 #include <cmath>
 
 #include "simulation.hpp"
+#include "opengl.hpp"
 
-
-FormatScope::FormatScope(std::ostream & os)
-  : __os(os)
-  , __temp(nullptr)
-{
-  __temp.copyfmt(os);
-}
-
-FormatScope::~FormatScope() {
-  __os.copyfmt(__temp);
-}
+struct FormatScope {
+  FormatScope(std::ostream & os)
+    : __os(os)
+    , __temp(nullptr)
+  {
+    __temp.copyfmt(os);
+  }
+  ~FormatScope() {
+    __os.copyfmt(__temp);
+  }
+private:
+  std::ostream & __os;
+  std::ios __temp;
+};
 
 FPS::FPS(float _fps)
   : __desired(_fps)
@@ -99,7 +103,7 @@ bool CycleOption<T>::updateImpl(SDL_Event const & event) {
 
 template<class T>
 void CycleOption<T>::reportCurrentImpl(std::ostream & os) const {
-  os << indexToName(__cur) << "(" << indexToVal(__cur) << ")";
+  os << "(" << indexToVal(__cur) << ") " << indexToName(__cur);
 }
 
 template<class T>
@@ -139,6 +143,46 @@ void RangeOption<T>::reportCurrentImpl(std::ostream & os) const {
   os << indexToVal(__cur);
 }
 
-template class CycleOption<int>;
-template class CycleOption<Mode>;
-template class RangeOption<float>;
+Interface::Interface(OpenGL & _opengl, float _fps)
+  : __opengl(_opengl)
+  , __fps(_fps)
+  , __vel_multiplier("Velocity Multiplier", 1.0f, 0.1f, 10.0f, 101, SDLK_r, SDLK_f)
+  , __magnification("Magnification", 1.0f, 1.0f, 4.0f, 31, SDLK_w, SDLK_s)
+  , __offset_x("Offset X-Axis", 0.0f, -1.0f, 1.0f, 21, SDLK_RIGHT, SDLK_LEFT)
+  , __offset_y("Offset Y-Axis", 0.0f, -1.0f, 1.0f, 21, SDLK_DOWN, SDLK_UP)
+  , __mode("Visualisation Mode", SDLK_1)
+{
+  __options.push_back(&__vel_multiplier);
+  __options.push_back(&__magnification);
+  __options.push_back(&__offset_x);
+  __options.push_back(&__offset_y);
+  __mode.insert("Smoke", Mode::smoke);
+  __mode.insert("Velocity Field", Mode::velocity);
+  __mode.insert("Divergence", Mode::divergence);
+  __mode.insert("Pressure", Mode::pressure);
+  __mode.insert("Fluid", Mode::fluid);
+  __options.push_back(&__mode);
+}
+
+void Interface::resetFlags() {
+  for(auto i = __options.begin(); i != __options.end(); ++i) {
+    (*i)->clearChangedFlag();
+  }
+}
+
+void Interface::updateInputs(SDL_Event const & event) {
+  for(auto i = __options.begin(); i != __options.end(); ++i) {
+    (*i)->Update(event);
+  }
+}
+
+void Interface::__render(Resolution const & _window_res, float _mag, float2 _off) {
+  std::stringstream os_text;
+  os_text.setf(std::ios::fixed, std:: ios::floatfield);
+  os_text.precision(2);
+  __fps.reportCurrent(os_text);
+  os_text << std::endl;
+  __mode.reportCurrent(os_text);
+  __quad.setText(__opengl.getFont(), os_text.str().c_str());
+  __quad.render(_window_res, _mag, _off);
+}

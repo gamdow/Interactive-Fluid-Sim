@@ -30,11 +30,18 @@ private:
 template<class T>
 struct ManagedArray {
   inline size_t getSizeBytes() const {return __size * sizeof(T);}
+  inline size_t getSize() const {return __size;}
   operator T * &() {return __data;}
-  void swap(T * & io);
-  void swap(ManagedArray<T> & io);
-  void reset();
+  operator T const * () const {return __data;}
   T * getData() const {return __data;}
+  // void swap(T * & io);
+  // void swap(ManagedArray<T> & io);
+  void reset();
+  friend void swap(ManagedArray & _l, ManagedArray & _r) {
+      using std::swap;
+      swap(_l.__data, _r.__data);
+      swap(_l.__size, _r.__size);
+  }
 protected:
   ManagedArray() : __size(0u), __data(nullptr) {}
   virtual ~ManagedArray() {}
@@ -54,10 +61,13 @@ private:
   virtual bool allocate(T * & o_ptr, Allocator const & _alloc, size_t _size) = 0;
 };
 
+template<class T> struct DeviceArray;
+
 template<class T>
 struct HostArray : public Managed1DArray<T> {
   HostArray() {}
   HostArray(Allocator const & _alloc, size_t _size) {this->resize(_alloc, _size);}
+  HostArray<T> & operator=(DeviceArray<T> const & _in);
 private:
   virtual void deallocate(T * _ptr);
   virtual bool allocate(T * & o_ptr, Allocator const & _alloc, size_t _size);
@@ -68,6 +78,7 @@ template<class T>
 struct DeviceArray : public Managed1DArray<T> {
   DeviceArray() {}
   DeviceArray(Allocator const & _alloc, size_t _size) {this->resize(_alloc, _size);}
+  DeviceArray<T> & operator=(HostArray<T> const & _in);
 private:
   virtual void deallocate(T * _ptr);
   virtual bool allocate(T * & o_ptr, Allocator const & _alloc, size_t _size);
@@ -80,8 +91,8 @@ struct MirroredArray {
   MirroredArray() {}
   MirroredArray(Allocator const & _alloc, size_t _size);
   T & operator[](int i) {return static_cast<T*>(__host)[i];}
-  T * & host() {return __host;}
-  T * & device() {return __device;}
+  HostArray<T> & host() {return __host;}
+  DeviceArray<T> & device() {return __device;}
   size_t getSizeBytes() const {return __host.getSizeBytes();}
   void resize(Allocator const & _alloc, size_t _size);
   void reset();

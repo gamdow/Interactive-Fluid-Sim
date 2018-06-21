@@ -27,8 +27,9 @@ int main(int argc, char * argv[]) {
   Interface interface(opengl, FRAME_RATE);
   reportCudaCapability();
   OptimalBlockConfig blockConfig(RESOLUTION);
+  float2 const DX = make_float2(LENGTH.x / blockConfig.optimal_res.width, LENGTH.y / blockConfig.optimal_res.height);
   KernelsWrapper kernels(blockConfig, BUFFER);
-  LBFECCSimulation sim(interface, kernels, PRESSURE_SOLVER_STEPS);
+  Simulation sim(interface, blockConfig, BUFFER, DX, kernels, PRESSURE_SOLVER_STEPS);
   Camera * camera = nullptr;
   try {
     camera = new CVCamera(VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
@@ -38,13 +39,7 @@ int main(int argc, char * argv[]) {
     camera = new NullCamera(RESOLUTION);
   }
   Renderer renderer(opengl, *camera, sim, interface);
-  float2 const DX = make_float2(LENGTH.x / kernels.getBufferRes().width, LENGTH.y / kernels.getBufferRes().height);
   std::cout << "dx = " << DX.x << "," << DX.y << " Max Velocity = " << LENGTH.y / 2.0f * SIM_STEPS_PER_FRAME / FRAME_RATE;
-
-  camera->resolution().print("camera res");
-  DeviceArray<uchar3> camera_frame(Allocator(), camera->resolution().size);
-
-
 
   bool stop = false;
   SDL_Event event;
@@ -70,8 +65,8 @@ int main(int argc, char * argv[]) {
 
     renderer.render();
 
-    checkCudaErrors(cudaMemcpy(camera_frame, camera->data().data, camera_frame.getSizeBytes(), cudaMemcpyHostToDevice));
-    kernels.copyToArray(sim.__fluidCells.device(), camera_frame, camera->resolution());
+    camera->updateDeviceArray();
+    kernels.copyToArray(sim.devicefluidCells(), camera->deviceArray(), const_cast<Camera const *>(camera)->resolution());
 
     sim.applyBoundary();
     sim.applySmoke();

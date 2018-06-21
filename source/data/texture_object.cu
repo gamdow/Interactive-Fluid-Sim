@@ -30,8 +30,13 @@ void TextureObject<T>::init(Allocator & _alloc, Resolution const & _res) {
 }
 
 template<class T>
-void TextureObject<T>::shutdown() {
+TextureObject<T>::~TextureObject() {
   checkCudaErrors(cudaDestroyTextureObject(__object));
+}
+
+template<class T>
+void TextureObject<T>::copyFrom(T const * _array, Resolution const & _res) {
+  cudaMemcpy2D(__array.getData(), __array.getPitch(), _array, sizeof(T) * _res.width, sizeof(T) * _res.width, _res.height, cudaMemcpyDeviceToDevice);
 }
 
 #define EXPLICT_INSTATIATION(TYPED_MACRO) \

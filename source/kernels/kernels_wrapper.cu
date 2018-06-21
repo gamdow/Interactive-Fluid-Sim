@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "kernels.cuh"
+#include "simulation.cuh"
 #include "../debug.hpp"
 
 KernelsWrapper::KernelsWrapper(OptimalBlockConfig const & _block_config, int _buffer_width)
@@ -25,9 +26,6 @@ KernelsWrapper::KernelsWrapper(OptimalBlockConfig const & _block_config, int _bu
 }
 
 KernelsWrapper::~KernelsWrapper() {
-  __f1Object.shutdown();
-  __f2Object.shutdown();
-  __f4Object.shutdown();
 }
 
 void KernelsWrapper::advectVelocity(float2 * io_velocity, float2 _rdx, float _dt) {
@@ -84,15 +82,15 @@ void KernelsWrapper::enforceSlip(float2 * io_velocity, float const * _fluid) {
 }
 
 void KernelsWrapper::d2rgba(float4 * o_buffer, float const * _buffer, float _multiplier) {
-  d_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _multiplier);
+  scalar_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _multiplier);
 }
 
 void KernelsWrapper::hsv2rgba(float4 * o_buffer, float2 const * _buffer, float _power) {
-  hsv_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _power);
+  vector_field_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _power);
 }
 
 void KernelsWrapper::float42rgba(float4 * o_buffer, float4 const * _buffer, float3 const * _map) {
-  float4_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _map);
+  map_to_rgba<<<__grid_dim,__block_dim>>>(o_buffer, _buffer, __buffer_res, _map);
 }
 
 void KernelsWrapper::copyToSurface(cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer) {

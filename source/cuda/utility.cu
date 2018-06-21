@@ -1,7 +1,7 @@
 #include "utility.cuh"
 
 #include "../debug.hpp"
-#include "../kernels/kernels.cuh"
+#include "../kernels/simulation.cuh"
 
 void reportCudaCapability() {
   format_out << "CUDA Capability: " << std::endl;

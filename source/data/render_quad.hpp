@@ -6,7 +6,7 @@
 #include <SDL2/SDL_ttf.h>
 #include <opencv2/opencv.hpp>
 
-#include "../kernels/kernels_wrapper.cuh"
+#include "../kernels/wrapper.cuh"
 #include "resolution.cuh"
 
 struct RenderQuad {
@@ -32,12 +32,11 @@ private:
 };
 
 struct SurfaceRenderQuad : public RenderQuad {
-  SurfaceRenderQuad(KernelsWrapper & _kers, Resolution const & _res, GLint _internal, GLenum _format, GLenum _type);
-  void copyToSurface(float4 * _array);
+  SurfaceRenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type);
+  void copyToSurface(KernelWrapper const & _kernel, float4 const * _array);
 private:
   cudaSurfaceObject_t createSurfaceObject();
   void destroySurfaceObject(cudaSurfaceObject_t _writeSurface);
-  KernelsWrapper & __kernels;
   cudaGraphicsResource_t __surface;
 };
 

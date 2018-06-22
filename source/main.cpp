@@ -5,7 +5,7 @@
 
 #include "data/resolution.cuh"
 #include "data/managed_array.cuh"
-#include "kernels/kernels_wrapper.cuh"
+//#include "kernels/kernels_wrapper.cuh"
 #include "opengl.hpp"
 #include "camera.hpp"
 #include "renderer.hpp"
@@ -28,8 +28,8 @@ int main(int argc, char * argv[]) {
   reportCudaCapability();
   OptimalBlockConfig blockConfig(RESOLUTION);
   float2 const DX = make_float2(LENGTH.x / blockConfig.optimal_res.width, LENGTH.y / blockConfig.optimal_res.height);
-  KernelsWrapper kernels(blockConfig, BUFFER);
-  Simulation sim(interface, blockConfig, BUFFER, DX, kernels, PRESSURE_SOLVER_STEPS);
+  //KernelsWrapper kernels(blockConfig, BUFFER);
+  Simulation sim(interface, blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
   Camera * camera = nullptr;
   try {
     camera = new CVCamera(VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
@@ -66,7 +66,7 @@ int main(int argc, char * argv[]) {
     renderer.render();
 
     camera->updateDeviceArray();
-    kernels.copyToArray(sim.devicefluidCells(), camera->deviceArray(), const_cast<Camera const *>(camera)->resolution());
+    sim.copyToFluidCells(*camera);
 
     sim.applyBoundary();
     sim.applySmoke();

@@ -1,4 +1,4 @@
-#include "kernels.cuh"
+#include "simulation.cuh"
 
 // #include <iostream> // for host code
 #include <stdio.h> // for kernel code

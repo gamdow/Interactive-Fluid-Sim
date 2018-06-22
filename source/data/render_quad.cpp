@@ -70,9 +70,8 @@ void RenderQuad::updateQuad(Resolution const & _quad_res, Resolution const & _wi
   }
 }
 
-SurfaceRenderQuad::SurfaceRenderQuad(KernelsWrapper & _kers, Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
+SurfaceRenderQuad::SurfaceRenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
   : RenderQuad(_internal, _format, _type)
-  , __kernels(_kers)
   , __surface(nullptr)
 {
   setResolution(_res);
@@ -99,9 +98,9 @@ void SurfaceRenderQuad::destroySurfaceObject(cudaSurfaceObject_t _writeSurface) 
   cudaGraphicsUnmapResources(1, &__surface);
 }
 
-void SurfaceRenderQuad::copyToSurface(float4 * _array) {
+void SurfaceRenderQuad::copyToSurface(KernelWrapper const & _kernel, float4 const * _array) {
   cudaSurfaceObject_t writeSurface = createSurfaceObject();
-  __kernels.copyToSurface(writeSurface, resolution(), _array);
+  _kernel.copyToSurface(writeSurface, resolution(), _array);
   destroySurfaceObject(writeSurface);
 }
 

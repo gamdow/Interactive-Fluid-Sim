@@ -2,8 +2,6 @@
 
 #include <cuda_runtime.h>
 
-#include "i_renderer.h"
-#include "i_renderable.h"
 #include "data/managed_array.h"
 #include "kernels/simulation.h"
 #include "kernels/visualisation.h"
@@ -20,20 +18,20 @@ struct Interface;
 struct KernelsWrapper;
 struct Camera;
 
-struct Simulation : public IRenderable {
-  Simulation(Interface const & _interface, IRenderer & _renderer, OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps);
+struct Simulation {
+  Simulation(Interface const & _interface, OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps);
   virtual ~Simulation() {}
+  Resolution const & visualisation_resolution() const {return __visualisation.buffer_resolution();}
+  SurfaceWriter const & visualisation_surface_writer() const {return __visualisation;}
   void step(float _dt);
   void applyBoundary();
   void applySmoke();
   void reset();
   void updateFluidCells(DeviceArray<float> const & _fluid_cells);
 private:
-  virtual void __render();
   LBFECCSimulationWrapper __simulation;
   VisualisationWrapper __visualisation;
   Interface const & __interface;
-  ISurfaceRenderTarget & __renderTarget;
   int const PRESSURE_SOLVER_STEPS;
   float4 __min_rgba, __max_rgba;
   HostArray<float> __fluidCells;

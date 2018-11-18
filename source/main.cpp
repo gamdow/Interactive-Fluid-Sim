@@ -11,6 +11,7 @@
 #include "simulation.h"
 #include "interface.h"
 #include "renderer.h"
+#include "data/render_quad.h"
 
 void quit(int _code, char const * _message);
 
@@ -24,28 +25,36 @@ int const PRESSURE_SOLVER_STEPS = 200;
 float TIME_DELTA = 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE);
 
 int main(int argc, char * argv[]) {
-  OpenGL opengl(RESOLUTION);
-  Interface interface(FRAME_RATE);
-  Renderer renderer(interface, opengl);
-  InterfaceRenderer interface_render(interface, renderer);
 
+  std::cout << std::endl;
+  OpenGL opengl(RESOLUTION);
   reportCudaCapability();
   OptimalBlockConfig blockConfig(RESOLUTION);
+  Interface interface(FRAME_RATE);
+  Renderer renderer(interface, opengl);
+
+
+  std::cout << std::endl;
   float2 const DX = make_float2(LENGTH.x / blockConfig.optimal_res.width, LENGTH.y / blockConfig.optimal_res.height);
+  Simulation simulation(interface, blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
 
-  Simulation simulation(interface, renderer, blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
-
+  std::cout << std::endl;
   Camera * camera = nullptr;
   try {
-    camera = new CVCamera(renderer, VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
+    camera = new CVCamera(VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
   } catch (std::exception const & e) {
     std::cout << e.what() << std::endl << std::endl;
     delete camera;
-    camera = new NullCamera(renderer, RESOLUTION);
+    camera = new NullCamera(RESOLUTION);
   }
   CameraFilter camera_filter(blockConfig, BUFFER);
 
-  std::cout << "dx = " << DX.x << "," << DX.y << " Max Velocity = " << LENGTH.y / 2.0f * SIM_STEPS_PER_FRAME / FRAME_RATE;
+  std::cout << std::endl;
+  TextRenderQuad interface_render(renderer);
+  TextureRenderQuad camera_render(renderer, GL_RGB, GL_BGR, GL_UNSIGNED_BYTE);
+  SurfaceRenderQuad simulation_render(renderer, GL_RGBA32F, GL_RGBA, GL_FLOAT, simulation.visualisation_resolution());
+
+  std::cout << std::endl << "dx = " << DX.x << "," << DX.y << " Max Velocity = " << LENGTH.y / 2.0f * SIM_STEPS_PER_FRAME / FRAME_RATE;
 
   bool stop = false;
   SDL_Event event;
@@ -69,8 +78,12 @@ int main(int argc, char * argv[]) {
 
     if(stop) break;
 
-    camera->render();
-    simulation.render();
+    ArrayStructConst<uchar3> frame_data = camera->frameData();
+    camera_render.bindTexture(frame_data.resolution.width, frame_data.resolution.height, frame_data.data);
+    camera_render.render();
+    simulation_render.setSurfaceData(simulation.visualisation_surface_writer());
+    simulation_render.render();
+    interface_render.setText(interface.screenText().c_str());
     interface_render.render();
     renderer.swapBuffers();
 

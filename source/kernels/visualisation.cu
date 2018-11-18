@@ -19,15 +19,13 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
 VisualisationWrapper::VisualisationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width)
   : KernelWrapper(_block_config, _buffer_width)
 {
-  format_out << "Constructing Kernel Device Buffers:" << std::endl;
+  format_out << "Constructing Visualisation Kernel Buffers:" << std::endl;
   OutputIndent indent;
-  {
-    Allocator alloc;
-    __min.resize(alloc, 1u);
-    __max.resize(alloc, 1u);
-    __f4reduce.resize(alloc, grid().x * grid().y);
-    __rgba.resize(alloc, buffer_resolution().size);
-  }
+  Allocator alloc;
+  __min.resize(alloc, 1u);
+  __max.resize(alloc, 1u);
+  __f4reduce.resize(alloc, grid().x * grid().y);
+  __rgba.resize(alloc, buffer_resolution().size);
 }
 
 void VisualisationWrapper::visualise(float const * _buffer) {

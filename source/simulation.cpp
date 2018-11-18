@@ -9,16 +9,15 @@
 #include "interface.h"
 #include "camera.h"
 
-Simulation::Simulation(Interface const & _interface, IRenderer & _renderer, OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps)
+Simulation::Simulation(Interface const & _interface, OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps)
   : __simulation(_block_config, _buffer_width, _dx)
   , __visualisation(_block_config, _buffer_width)
   , __interface(_interface)
-  , __renderTarget(_renderer.newSurfaceRenderTarget(GL_RGBA32F, GL_RGBA, GL_FLOAT, __visualisation.buffer_resolution()))
   , PRESSURE_SOLVER_STEPS(_pressure_steps)
   , __min_rgba(make_float4(0.0f))
   , __max_rgba(make_float4(1.0f))
 {
-  format_out << "Constructing Simluation Device Buffers:" << std::endl;
+  format_out << "Constructing Simluation Buffers:" << std::endl;
   OutputIndent indent1;
   __simulation.buffer_resolution().print("Resolution");
   {
@@ -125,9 +124,4 @@ void Simulation::reset() {
 
 void Simulation::updateFluidCells(DeviceArray<float> const & _fluid_cells) {
   __simulation.fluidCells() = _fluid_cells;
-}
-
-void Simulation::__render() {
-  __renderTarget.setSurfaceData(__visualisation);
-  __renderTarget.render();
 }

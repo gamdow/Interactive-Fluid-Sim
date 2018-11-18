@@ -5,8 +5,6 @@
 
 #include "interface/fps.h"
 #include "interface/option.h"
-#include "i_renderer.h"
-#include "i_renderable.h"
 
 struct Interface {
   Interface(float _fps);
@@ -19,6 +17,7 @@ struct Interface {
   float2 offset() const;
   ScaleOption const & filterThreshold() const {return __filter_threshold;}
   ModeOption const & mode() const {return __mode;}
+  std::string screenText() const;
 private:
   FPS __fps;
   ScaleOption __vel_multiplier;
@@ -28,12 +27,4 @@ private:
   ScaleOption __filter_threshold;
   ModeOption __mode;
   std::vector<OptionBase*> __options;
-};
-
-struct InterfaceRenderer : public IRenderable {
-  InterfaceRenderer(Interface const & _interface, IRenderer & _renderer);
-private:
-  virtual void __render();
-  Interface const & __interface;
-  ITextRenderTarget & __renderTarget;
 };

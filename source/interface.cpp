@@ -8,7 +8,6 @@
 #include "cuda/helper_math.h"
 
 #include "simulation.h"
-#include "interface.h"
 
 Interface::Interface(float _fps)
   : __fps(_fps)
@@ -48,19 +47,12 @@ float2 Interface::offset() const {
   return make_float2(__offset_x, __offset_y) * (__magnification - 1.0f);
 }
 
-InterfaceRenderer::InterfaceRenderer(Interface const & _interface, IRenderer & _renderer)
-  : __interface(_interface)
-  , __renderTarget(_renderer.newTextRenderTarget())
-{
-}
-
-void InterfaceRenderer::__render() {
+std::string Interface::screenText() const {
   std::stringstream os_text;
   os_text.setf(std::ios::fixed, std:: ios::floatfield);
   os_text.precision(2);
-  __interface.fps().reportCurrent(os_text);
+  __fps.reportCurrent(os_text);
   os_text << std::endl;
-  __interface.mode().reportCurrent(os_text);
-  __renderTarget.setText(os_text.str().c_str());
-  __renderTarget.render();
+  __mode.reportCurrent(os_text);
+  return os_text.str();
 }

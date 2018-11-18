@@ -19,6 +19,8 @@ SimulationWrapper::SimulationWrapper(OptimalBlockConfig const & _block_config, i
   , __dx(_dx)
   , __rdx(make_float2(1.0f / _dx.x, 1.0f / _dx.y))
 {
+  format_out << "Constructing Simulation Kernel Buffers:" << std::endl;
+  OutputIndent indent;
   Allocator alloc;
   __fluid_cells.resize(alloc, buffer_resolution().size);
   __divergence.resize(alloc, buffer_resolution().size);
@@ -68,6 +70,7 @@ void SimulationWrapper::advect(float2 * _out, float2 const * _in, float _dt) {
 BFECCSimulationWrapper::BFECCSimulationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx)
   : SimulationWrapper(_block_config, _buffer_width, _dx)
 {
+  format_out << "Constructing Additional BFECC Simulation Kernel Buffers:" << std::endl;
   Allocator alloc;
   __f2_temp.resize(alloc, buffer_resolution().size);
 }
@@ -82,6 +85,8 @@ void BFECCSimulationWrapper::advectVelocity(float _dt) {
 LBFECCSimulationWrapper::LBFECCSimulationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx)
   : SimulationWrapper(_block_config, _buffer_width, _dx)
 {
+  format_out << "Constructing Additional LBFECC Simulation Kernel Buffers:" << std::endl;
+  OutputIndent indent;
   Allocator alloc;
   __f2_tempA.resize(alloc, buffer_resolution().size);
   __f2_tempB.resize(alloc, buffer_resolution().size);

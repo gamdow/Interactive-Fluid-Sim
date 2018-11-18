@@ -6,12 +6,10 @@ __global__ void filter(float * o_buffer, Resolution _out_res, uchar3 const * _bu
 CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width)
   : KernelWrapper(_block_config, _buffer_width)
 {
-  format_out << "Constructing Camera Filter Device Buffers:" << std::endl;
+  format_out << "Constructing Camera Filter Kernel Buffers:" << std::endl;
   OutputIndent indent;
-  {
-    Allocator alloc;
-    __output.resize(alloc, buffer_resolution().size);
-  }
+  Allocator alloc;
+  __output.resize(alloc, buffer_resolution().size);
 }
 
 void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, float _threshold) {

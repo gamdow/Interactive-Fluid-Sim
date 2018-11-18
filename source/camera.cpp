@@ -7,25 +7,14 @@
 #include "cuda/helper_cuda.h"
 #include "renderer.h"
 
-Camera::Camera(IRenderer & _renderer)
-  : __renderTarget(_renderer.newTextureRenderTarget(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE))
-{
-}
-
-Camera::Camera(IRenderer & _renderer, Resolution const & _res, cv::Mat const & _mat)
-  : __renderTarget(_renderer.newTextureRenderTarget(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE))
-  , __resolution(_res)
+Camera::Camera(Resolution const & _res, cv::Mat const & _mat)
+  : __resolution(_res)
   , __frame(_mat)
 {
 }
 
-void Camera::__render() {
-  __renderTarget.bindTexture(__frame.cols, __frame.rows, __frame.data);
-  __renderTarget.render();
-}
-
-NullCamera::NullCamera(IRenderer & _renderer, Resolution _res)
-  : Camera(_renderer, _res, cv::Mat::zeros(_res.height, _res.width, CV_8UC3))
+NullCamera::NullCamera(Resolution _res)
+  : Camera(_res, cv::Mat::zeros(_res.height, _res.width, CV_8UC3))
 {
   format_out << "Null Camera:" << std::endl;
   float r = _res.height / 20;
@@ -71,9 +60,8 @@ NullCamera::NullCamera(IRenderer & _renderer, Resolution _res)
   }
 }
 
-CVCamera::CVCamera(IRenderer & _renderer, int _index, Resolution _res, float _fps)
-  : Camera(_renderer)
-  , __camera(_index)
+CVCamera::CVCamera(int _index, Resolution _res, float _fps)
+  : __camera(_index)
 {
   format_out << "OpenCV Camera:" << std::endl;
   OutputIndent indent;

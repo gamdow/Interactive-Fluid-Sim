@@ -86,11 +86,11 @@ SurfaceRenderQuad::~SurfaceRenderQuad() {
   cudaGraphicsUnmapResources(1, &__resource);
 }
 
-void SurfaceRenderQuad::__setSurfaceData(SurfaceWriter const & _writer) {
+void SurfaceRenderQuad::setSurfaceData(SurfaceWriter const & _writer) {
   _writer.writeToSurface(__surface, resolution());
 }
 
-void TextRenderQuad::__setText(char const * _val) {
+void TextRenderQuad::setText(char const * _val) {
   if(*_val == 0) {
     // empty string -> 0 x 0 texture -> seg fault
     _val = " ";

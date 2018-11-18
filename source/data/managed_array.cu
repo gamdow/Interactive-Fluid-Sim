@@ -1,12 +1,12 @@
-#include "managed_array.cuh"
+#include "managed_array.h"
 
 #include <iostream>
 #include <cstring>
 #include <typeinfo>
 
-#include "../debug.hpp"
+#include "../debug.h"
 #include "../cuda/helper_cuda.h"
-#include "../cuda/utility.cuh"
+#include "../cuda/utility.h"
 
 void Allocator::report() const {
   format_out << "Total Host: " << __host_allocation_bytes_total << " bytes, Total Device: " << __device_allocation_bytes_total << " bytes" << std::endl;
@@ -40,17 +40,6 @@ bool Allocator::reportAllocate(size_t & io_total, char const * _function_name, c
   }
 }
 
-// template<class T>
-// void ManagedArray<T>::swap(T * & io) {
-//   std::swap(__data, io);
-// }
-//
-// template<class T>
-// void ManagedArray<T>::swap(ManagedArray<T> & io) {
-//   std::swap(__data, io.__data);
-//   std::swap(__size, io.__size);
-// }
-
 template<class T> void ManagedArray<T>::reset() {
   clear(__data, getSizeBytes());
 }
@@ -73,6 +62,11 @@ template<class T> bool HostArray<T>::allocate(T * & o_ptr, Allocator const & _al
 template<class T> void HostArray<T>::deallocate(T * _ptr) {delete [] _ptr;}
 
 template<class T> void HostArray<T>::clear(T * _ptr, size_t _bytes) {std::memset(_ptr, 0, _bytes);}
+
+template<class T> DeviceArray<T> & DeviceArray<T>::operator=(DeviceArray<T> const & _in) {
+  checkCudaErrors(cudaMemcpy(*this, _in, this->getSizeBytes(), cudaMemcpyDeviceToDevice));
+  return *this;
+}
 
 template<class T> DeviceArray<T> & DeviceArray<T>::operator=(HostArray<T> const & _in) {
   checkCudaErrors(cudaMemcpy(*this, _in, this->getSizeBytes(), cudaMemcpyHostToDevice));

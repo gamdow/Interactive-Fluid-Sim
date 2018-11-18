@@ -1,8 +1,8 @@
-#include "resolution.cuh"
+#include "resolution.h"
 
 #include <iostream>
 
-#include "../debug.hpp"
+#include "../debug.h"
 
 Resolution::Resolution()
   : width(0)
@@ -30,5 +30,5 @@ Resolution::Resolution(Resolution const & _in, int _buffer)
 }
 
 void Resolution::print(char const * _name) const {
-  format_out << _name << ": " << width << " x " << height << std::endl;
+  format_out << _name << ": " << width << " x " << height << " (+" << buffer << ")" << std::endl;
 }

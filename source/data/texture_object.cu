@@ -1,4 +1,4 @@
-#include "texture_object.cuh"
+#include "texture_object.h"
 
 #include <iostream>
 #include <typeinfo>

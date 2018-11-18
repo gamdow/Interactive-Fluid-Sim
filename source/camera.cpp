@@ -1,46 +1,41 @@
-#include "camera.hpp"
+#include "camera.h"
 
 #include <string>
 #include <cuda_runtime.h>
-#include <opencv2/opencv.hpp>
 
-#include "debug.hpp"
+#include "debug.h"
+#include "cuda/helper_cuda.h"
+#include "renderer.h"
 
-Camera::Camera()
-  : __quad(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE)
+Camera::Camera(IRenderer & _renderer)
+  : __renderTarget(_renderer.newTextureRenderTarget(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE))
 {
 }
 
-Camera::Camera(Resolution const & _res, cv::Mat const & _mat)
-  : __quad(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE)
+Camera::Camera(IRenderer & _renderer, Resolution const & _res, cv::Mat const & _mat)
+  : __renderTarget(_renderer.newTextureRenderTarget(GL_RGB, GL_BGR, GL_UNSIGNED_BYTE))
   , __resolution(_res)
   , __frame(_mat)
 {
 }
 
-void Camera::updateDeviceArray() {
-  if(__device.getSize() != __resolution.size) {
-    __device.resize(Allocator(), __resolution.size);
-  }
-  checkCudaErrors(cudaMemcpy(__device, __frame.data, __device.getSizeBytes(), cudaMemcpyHostToDevice));
+void Camera::__render() {
+  __renderTarget.bindTexture(__frame.cols, __frame.rows, __frame.data);
+  __renderTarget.render();
 }
 
-void Camera::__render(Resolution const & _window_res, float _mag, float2 _off) {
-  __quad.bindTexture(__frame);
-  __quad.render(__resolution, _window_res, _mag, _off);
-}
-
-NullCamera::NullCamera(Resolution _res)
-  : Camera(_res, cv::Mat::zeros(_res.height, _res.width, CV_8UC3))
+NullCamera::NullCamera(IRenderer & _renderer, Resolution _res)
+  : Camera(_renderer, _res, cv::Mat::zeros(_res.height, _res.width, CV_8UC3))
 {
   format_out << "Null Camera:" << std::endl;
-  for(int k = 2; k < 3; ++k) {
-    int odd = k % 2;
-    for(int l = 1; l < 2 + odd; ++l) {
-      float2 center = make_float2(k * 80 - 2.5f * 80.f + _res.width / 2, l * 80 - 2.5f * 80.f + 100 - 40 * odd + _res.height / 2);
+  float r = _res.height / 20;
+  for(float k = -2.0f; k < 3.0f; k += 1.0f) {
+    float odd = int(k) % 2;
+    for(float l = -1 - odd / 2; l < 2 + odd / 2; l += 1.0f) {
+      float2 center = make_float2(4 * r * k + _res.width / 2, 4 * r * l + _res.height / 2);
       for(int i = 0; i < _res.width; ++i) {
         for(int j = 0; j < _res.height; ++j) {
-          if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < 5000) {
+          if((center.y - j) * (center.y - j) + (center.x - i) * (center.x - i) < r * r) {
             cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
             e[0] = 255u;
             e[1] = 255u;
@@ -50,10 +45,35 @@ NullCamera::NullCamera(Resolution _res)
       }
     }
   }
+  for(int i = 0; i < 10; ++i) {
+    for(int j = 0; j < 10; ++j) {
+      {
+        cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
+        e[0] = 255u;
+        e[1] = 255u;
+        e[2] = 255u;
+      }
+      {
+        cv::Vec3b & e = frame().at<cv::Vec3b>(_res.height - j, _res.width - i);
+        e[0] = 255u;
+        e[1] = 255u;
+        e[2] = 255u;
+      }
+    }
+  }
+  for(int i = 0; i < 10; ++i) {
+    for(int j = 0; j < 10; ++j) {
+      cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
+      e[0] = 255u;
+      e[1] = 255u;
+      e[2] = 255u;
+    }
+  }
 }
 
-CVCamera::CVCamera(int _index, Resolution _res, float _fps)
-  : __camera(_index)
+CVCamera::CVCamera(IRenderer & _renderer, int _index, Resolution _res, float _fps)
+  : Camera(_renderer)
+  , __camera(_index)
 {
   format_out << "OpenCV Camera:" << std::endl;
   OutputIndent indent;

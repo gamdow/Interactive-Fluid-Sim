@@ -1,8 +1,8 @@
-#include "opengl.hpp"
+#include "opengl.h"
 
 #include <iostream>
 
-#include "debug.hpp"
+#include "debug.h"
 
 OpenGL::OpenGL(Resolution _res)
   : __resolution(_res)

@@ -1,7 +1,8 @@
-#include "utility.cuh"
+#include "utility.h"
 
-#include "../debug.hpp"
-#include "../kernels/simulation.cuh"
+#include "../debug.h"
+
+__global__ void pressure_solve(float * o_pressure, float const * _pressure, float const * _divergence, float const * _fluid, Resolution _buffer_res, float2 _dx);
 
 void reportCudaCapability() {
   format_out << "CUDA Capability: " << std::endl;

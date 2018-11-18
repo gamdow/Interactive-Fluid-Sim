@@ -1,22 +1,56 @@
-#include "renderer.hpp"
+#include "renderer.h"
 
-#include "interface.hpp"
-#include "opengl.hpp"
-#include "data/resolution.cuh"
+#include "interface.h"
+#include "opengl.h"
+#include "data/resolution.h"
+#include "data/render_quad.h"
 
-Renderer::Renderer(OpenGL & _opengl, Renderable & _camera, Renderable & _simulation, Interface & _interface)
-  : __opengl(_opengl)
-  , __camera(_camera)
-  , __simulation(_simulation)
-  , __interface(_interface)
+Renderer::Renderer(Interface const & _interface, OpenGL & _opengl)
+  : __interface(_interface)
+  , __opengl(_opengl)
 {
 }
 
-void Renderer::render() {
-  float magnification = __interface.magnification();
-  float2 offset = __interface.offset();
-  __camera.render(__opengl.resolution(), magnification, offset);
-  __simulation.render(__opengl.resolution(), magnification, offset);
-  __interface.render(__opengl.resolution(), magnification, offset);
+Renderer::~Renderer() {
+  for(auto i = __quads.begin(); i != __quads.end(); ++i) {
+    delete *i;
+  }
+}
+
+void Renderer::swapBuffers() {
   __opengl.swapWindow();
+}
+
+ITextureRenderTarget & Renderer::__newTextureRenderTarget(GLint _internal, GLenum _format, GLenum _type) {
+  auto target = new TextureRenderQuad(*this, _internal, _format, _type);
+  __quads.push_back(target);
+  return *target;
+}
+
+ISurfaceRenderTarget & Renderer::__newSurfaceRenderTarget(GLint _internal, GLenum _format, GLenum _type, Resolution const & _res) {
+  auto target = new SurfaceRenderQuad(*this, _internal, _format, _type, _res);
+  __quads.push_back(target);
+  return *target;
+}
+
+ITextRenderTarget & Renderer::__newTextRenderTarget() {
+  auto target = new TextRenderQuad(*this);
+  __quads.push_back(target);
+  return *target;
+}
+
+Resolution const & Renderer::__resolution() const {
+  return __opengl.resolution();
+}
+
+float Renderer::__magnification() const {
+  return __interface.magnification();
+}
+
+float2 Renderer::__offset() const {
+  return __interface.offset();
+}
+
+TTF_Font * Renderer::__font() const {
+  return __opengl.font();
 }

@@ -4,19 +4,22 @@
 
 http://docs.nvidia.com/cuda/cuda-quick-start-guide/index.html#linux
 
-1. Select NVIDIA binary driver from Additional Drivers in Software & Updates
+1. Purge old drivers:
+    ```
+    sudo apt-get remove --purge nvidia-*
+    sudo apt-get remove --purge libnvidia-*
+    ```
+    <!--(Select NVIDIA binary driver from Additional Drivers in Software & Updates)-->
 1. Download the toolkit: https://developer.nvidia.com/cuda-downloads. Select correct version based on minimum driver:
     ```
-    CUDA 9.1: 387.xx
-    CUDA 9.0: 384.xx
-    CUDA 8.0  375.xx (GA2)
-    CUDA 8.0: 367.4x
-    CUDA 7.5: 352.xx
-    CUDA 7.0: 346.xx
-    CUDA 6.5: 340.xx
-    CUDA 6.0: 331.xx
-    CUDA 5.5: 319.xx
-    CUDA 5.0: 304.xx
+    CUDA 10.0: 410.48
+    CUDA  9.2: 396.xx
+    CUDA  9.1: 390.xx (update)
+    CUDA  9.0: 384.xx
+    CUDA  8.0  375.xx (GA2)
+    CUDA  8.0: 367.4x
+    CUDA  7.5: 352.xx
+    CUDA  7.0: 346.xx
     ```
 1. Install the repository meta-data, install GPG key, update the apt-get cache, and install CUDA:
     ```
@@ -24,6 +27,18 @@ http://docs.nvidia.com/cuda/cuda-quick-start-guide/index.html#linux
     $ sudo apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1704/x86_64/7fa2af80.pub
     $ sudo apt-get update
     $ sudo apt-get install cuda
+    ```
+    if you recieved the following error (Ubuntu 18.04):
+    ```
+    trying to overwrite '/usr/lib/x86_64-linux-gnu/libGLX_indirect.so.0', which is also in package libglx-mesa0:amd64 18.0.5-0ubuntu0~18.04.1
+    Errors were encountered while processing:
+    /var/cache/apt/archives/nvidia-390_390.30-0ubuntu1_amd64.deb
+    ```
+    then:
+    ```
+    sudo mv /usr/lib/x86_64-linux-gnu/libGLX_indirect.so.0 /usr/lib/x86_64-linux-gnu/libGLX_indirect.so.0.old
+    dpkg -i --force-overwrite /var/cache/apt/archives/nvidia-390_390.30-0ubuntu1_amd64.deb
+    sudo apt-get install cuda-9-0
     ```
 1. Reboot the system to load the NVIDIA drivers.
 1. Set up the development environment by modifying the PATH and LD_LIBRARY_PATH variables (`~/.profile`):
@@ -47,9 +62,7 @@ http://docs.nvidia.com/cuda/cuda-quick-start-guide/index.html#linux
 
 ## SDL + OpenGL
 
-`$ sudo apt install libsdl2-dev`
-`$ sudo apt install libsdl2-ttf-dev`
-`$ sudo apt install libglew-dev`
+`$ sudo apt install libsdl2-dev libsdl2-ttf-dev libglew-dev`
 
 ## OpenCV
 

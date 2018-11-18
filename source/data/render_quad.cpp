@@ -1,12 +1,19 @@
-#include "render_quad.hpp"
+#include "render_quad.h"
 
 #include <iostream>
 #include <cuda_gl_interop.h>
+#include <SDL2/SDL_ttf.h>
 
+#include "../debug.h"
 #include "../cuda/helper_cuda.h"
+#include "../cuda/utility.h"
+#include "../i_render_settings.h"
 
-RenderQuad::RenderQuad(GLint _internal, GLenum _format, GLenum _type)
-  : __id(0u)
+#include <iostream>
+
+RenderQuad::RenderQuad(IRenderSettings const & _render_settings, GLint _internal, GLenum _format, GLenum _type)
+  : __settings(_render_settings)
+  , __id(0u)
   , __internal(_internal)
   , __format(_format)
   , __type(_type)
@@ -17,113 +24,88 @@ RenderQuad::RenderQuad(GLint _internal, GLenum _format, GLenum _type)
   verts[3] = make_float4(-1.f, -1.f, 0.f, 1.f);
   glGenTextures(1, &__id);
   assert(__id != 0);
-  std::cout << "\tglGenTextures: " << __id << std::endl;
+  OutputIndent indent;
+  format_out << "glGenTextures: " << __id << std::endl;
 }
 
-void RenderQuad::render(Resolution _window_res, float _mag, float2 _off) {
-  updateQuad(_window_res, _mag, _off);
-  glBindTexture(GL_TEXTURE_2D, __id); {
-    glBegin(GL_QUADS); {
-      for(int i = 0; i < 4; ++i) {
-        float4 const & vert = verts[i];
-        glTexCoord2f(vert.z, vert.w); glVertex2f(vert.x, vert.y);
-      }
-    } glEnd();
-  } glBindTexture(GL_TEXTURE_2D, 0);
-}
+float2 RenderQuad::scale() const {
+   return make_float2(static_cast<float>(__resolution.width) / static_cast<float>(__settings.resolution().width), static_cast<float>(__resolution.height) / static_cast<float>(__settings.resolution().height));
+ }
 
-void RenderQuad::render(Resolution const & _quad_res, Resolution const & _window_res, float _mag, float2 _off) {
-  updateQuad(_quad_res, _window_res, _mag, _off);
-  glBindTexture(GL_TEXTURE_2D, __id); {
-    glBegin(GL_QUADS); {
-      for(int i = 0; i < 4; ++i) {
-        float4 const & vert = verts[i];
-        glTexCoord2f(vert.z, vert.w); glVertex2f(vert.x, vert.y);
-      }
-    } glEnd();
-  } glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-void RenderQuad::bindTexture(GLsizei width, GLsizei height, GLvoid const * data) {
+void RenderQuad::bindTexture(GLsizei _width, GLsizei _height, GLvoid const * _data) {
+  __resolution = Resolution(_width, _height);
   glBindTexture(GL_TEXTURE_2D, __id); {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, __internal, width, height, 0, __format, __type, data);
+    glTexImage2D(GL_TEXTURE_2D, 0, __internal, _width, _height, 0, __format, __type, _data);
   } glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void RenderQuad::bindTexture(cv::Mat const & _mat) {
-  bindTexture(_mat.cols, _mat.rows, _mat.data);
-}
-
-void RenderQuad::updateQuad(Resolution _window_res, float _mag, float2 _off) {
+void RenderQuad::updateVerts() {
+  auto m = __settings.magnification();
+  auto o = __settings.offset();
+  auto s = scale();
   for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = (verts[i].z * 2.f - 1.f) * _mag * static_cast<float>(__resolution.width) / static_cast<float>(_window_res.width) - _off.x;
-    verts[i].y = (1.f - verts[i].w * 2.f) * _mag * static_cast<float>(__resolution.height) / static_cast<float>(_window_res.height) + _off.y;
+    verts[i].x = (verts[i].z * 2.f - 1.f) * m * s.x - o.x;
+    verts[i].y = (1.f - verts[i].w * 2.f) * m * s.y - o.y;
   }
 }
 
-void RenderQuad::updateQuad(Resolution const & _quad_res, Resolution const & _window_res, float _mag, float2 _off) {
-  for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = (verts[i].z * 2.f - 1.f) * _mag * static_cast<float>(_quad_res.width) / static_cast<float>(_window_res.width) - _off.x;
-    verts[i].y = (1.f - verts[i].w * 2.f) * _mag * static_cast<float>(_quad_res.height) / static_cast<float>(_window_res.height) + _off.y;
-  }
+void RenderQuad::renderVerts() {
+  glBindTexture(GL_TEXTURE_2D, __id); {
+    glBegin(GL_QUADS); {
+      for(int i = 0; i < 4; ++i) {
+        float4 const & vert = verts[i];
+        glTexCoord2f(vert.z, vert.w); glVertex2f(vert.x, vert.y);
+      }
+    } glEnd();
+  } glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-SurfaceRenderQuad::SurfaceRenderQuad(Resolution const & _res, GLint _internal, GLenum _format, GLenum _type)
-  : RenderQuad(_internal, _format, _type)
-  , __surface(nullptr)
+SurfaceRenderQuad::SurfaceRenderQuad(IRenderSettings const & _render_settings, GLint _internal, GLenum _format, GLenum _type, Resolution const & _res)
+  : RenderQuad(_render_settings, _internal, _format, _type)
+  , __resource(nullptr)
+  , __surface(0u)
 {
-  setResolution(_res);
-  _res.print("\t\tResolution");
-  bindTexture(resolution().width, resolution().height, nullptr);
-  checkCudaErrors(cudaGraphicsGLRegisterImage(&__surface, id(), GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
-  std::cout << "\t\tcudaGraphicsGLRegisterImage: " << __surface << std::endl;
-}
-
-cudaSurfaceObject_t SurfaceRenderQuad::createSurfaceObject() {
-  cudaGraphicsMapResources(1, &__surface);
+  OutputIndent indent;
+  _res.print("Resolution");
+  bindTexture(_res.width, _res.height, nullptr);
+  checkCudaErrors(cudaGraphicsGLRegisterImage(&__resource, id(), GL_TEXTURE_2D, cudaGraphicsRegisterFlagsSurfaceLoadStore));
+  format_out << "cudaGraphicsGLRegisterImage: " << __resource << std::endl;
+  cudaGraphicsMapResources(1, &__resource);
   cudaArray_t writeArray;
-  cudaGraphicsSubResourceGetMappedArray(&writeArray, __surface, 0, 0);
+  cudaGraphicsSubResourceGetMappedArray(&writeArray, __resource, 0, 0);
   cudaResourceDesc wdsc;
   wdsc.resType = cudaResourceTypeArray;
   wdsc.res.array.array = writeArray;
-  cudaSurfaceObject_t writeSurface;
-  cudaCreateSurfaceObject(&writeSurface, &wdsc);
-  return writeSurface;
+  cudaCreateSurfaceObject(&__surface, &wdsc);
 }
 
-void SurfaceRenderQuad::destroySurfaceObject(cudaSurfaceObject_t _writeSurface) {
-  cudaDestroySurfaceObject(_writeSurface);
-  cudaGraphicsUnmapResources(1, &__surface);
+SurfaceRenderQuad::~SurfaceRenderQuad() {
+  cudaDestroySurfaceObject(__surface);
+  cudaGraphicsUnmapResources(1, &__resource);
 }
 
-void SurfaceRenderQuad::copyToSurface(KernelWrapper const & _kernel, float4 const * _array) {
-  cudaSurfaceObject_t writeSurface = createSurfaceObject();
-  _kernel.copyToSurface(writeSurface, resolution(), _array);
-  destroySurfaceObject(writeSurface);
+void SurfaceRenderQuad::__setSurfaceData(SurfaceWriter const & _writer) {
+  _writer.writeToSurface(__surface, resolution());
 }
 
-TextRenderQuad::TextRenderQuad()
-  : RenderQuad(GL_RGBA, GL_BGRA, GL_UNSIGNED_BYTE)
-  , __surface(nullptr)
-{
-}
-
-void TextRenderQuad::setText(TTF_Font * _font, char const * _val) {
+void TextRenderQuad::__setText(char const * _val) {
   if(*_val == 0) {
     // empty string -> 0 x 0 texture -> seg fault
     _val = " ";
   }
   SDL_FreeSurface(__surface);
   SDL_Color color = {255, 255, 255, 0};
-  __surface = TTF_RenderText_Blended_Wrapped(_font, _val, color, 640);
+  __surface = TTF_RenderText_Blended_Wrapped(renderSettings().font(), _val, color, 640);
   bindTexture(__surface->w, __surface->h, __surface->pixels);
 }
 
-void TextRenderQuad::updateQuad(Resolution _window_res, float _mag, float2 _off) {
+void TextRenderQuad::__render() {
+  auto s = scale();
   for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = -.9f + 1.8f * verts[i].z * static_cast<float>(__surface->w) / static_cast<float>(_window_res.width);
-    verts[i].y = .9f - 1.8f * verts[i].w * static_cast<float>(__surface->h) / static_cast<float>(_window_res.height);
+    verts[i].x = -.9f + 1.8f * verts[i].z * s.x;
+    verts[i].y = .9f - 1.8f * verts[i].w * s.y;
   }
+  renderVerts();
 }

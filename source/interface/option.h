@@ -10,10 +10,11 @@ struct OptionBase {
   void Update(SDL_Event const & event);
   inline void clearChangedFlag() {__changed = false;}
   inline bool hasChanged() const {return __changed;}
-  inline void reportCurrent(std::ostream & os) const {reportCurrentImpl(os);}
+  char const * name() const {return __name;}
+  void reportCurrent(std::ostream & os) const;
 private:
   virtual bool updateImpl(SDL_Event const & event) = 0;
-  virtual void reportCurrentImpl(std::ostream & os) const = 0;
+  virtual void __reportCurrent(std::ostream & os) const = 0;
   char const * __name;
   bool __changed;
 };
@@ -28,7 +29,7 @@ private:
   std::string indexToName(int _i) const {return __namedVals[__cur].first;}
   T indexToVal(int _i) const {return __namedVals[__cur].second;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void reportCurrentImpl(std::ostream & os) const;
+  virtual void __reportCurrent(std::ostream & os) const;
   typedef std::vector< std::pair<std::string, T> > Map;
   Map __namedVals;
   int __cur;
@@ -44,7 +45,7 @@ private:
   int valToIndex(T _v) const;
   T indexToVal(int _i) const {return _i * __step + __min;}
   virtual bool updateImpl(SDL_Event const & event);
-  virtual void reportCurrentImpl(std::ostream & os) const;
+  virtual void __reportCurrent(std::ostream & os) const;
   T __min, __step;
   int __cur, __nSteps;
   SDL_Keycode __up;

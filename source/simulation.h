@@ -5,14 +5,7 @@
 #include "data/managed_array.h"
 #include "kernels/simulation.h"
 #include "kernels/visualisation.h"
-
-enum Mode : int {
-  smoke = 0,
-  velocity,
-  divergence,
-  pressure,
-  fluid
-};
+#include "interface/enums.h"
 
 struct Interface;
 struct KernelsWrapper;

@@ -50,7 +50,7 @@ OpenGL::OpenGL(Resolution _res)
     return;
   }
 
-  __font = TTF_OpenFont("FreeSans.ttf", 24);
+  __font = TTF_OpenFont("FreeSans.ttf", 20);
   if (__font == nullptr) {
     throwFailure(SDL_GetError());
   }

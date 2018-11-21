@@ -35,6 +35,33 @@ OptimalBlockConfig::OptimalBlockConfig(Resolution _res)
   optimal_res.print("Adjusted Resolution");
 }
 
+__global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, uchar3 const * _buffer, Resolution _buffer_res) {
+  // surf2Dwrite<uchar3>(_buffer[_buffer_res.idx()], o_surface, (int)(_buffer_res.x() * sizeof(unsigned char)), _buffer_res.y(), cudaBoundaryModeTrap);
+  #ifdef __CUDA_ARCH__
+    __nv_tex_surf_handler("__surf2Dwrite_v2", (typename __nv_surf_trait<uchar3>::cast_type)&_buffer[_buffer_res.idx()], (int)sizeof(uchar3), o_surface, (int)(_buffer_res.x() * sizeof(uchar3)), _buffer_res.y(),  cudaBoundaryModeTrap);
+  #endif /* __CUDA_ARCH__ */
+}
+
+void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, uchar3 const * _buffer, Resolution const & _buffer_res) {
+  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+}
+
+__global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, float const * _buffer, Resolution _buffer_res) {
+  surf2Dwrite<float>(_buffer[_buffer_res.idx()], o_surface, (_buffer_res.x()) * sizeof(float), _buffer_res.y());
+}
+
+void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, Resolution const & _buffer_res) {
+  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+}
+
+__global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, unsigned char const * _buffer, Resolution _buffer_res) {
+  surf2Dwrite<unsigned char>(_buffer[_buffer_res.idx()], o_surface, (_buffer_res.x()) * sizeof(unsigned char), _buffer_res.y());
+}
+
+void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, unsigned char const * _buffer, Resolution const & _buffer_res) {
+  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+}
+
 void print(std::ostream & _out, float4 _v) {
   _out << "(" << _v.x << "," << _v.y << "," << _v.z << "," << _v.w << ")";
 }

@@ -33,7 +33,8 @@ struct ManagedArray {
   inline size_t getSize() const {return __size;}
   operator T * &() {return __data;}
   operator T const * () const {return __data;}
-  T * getData() const {return __data;}
+  T * getData() {return __data;}
+  T const * getData() const {return __data;}
   void reset();
   friend void swap(ManagedArray & _l, ManagedArray & _r) {
       using std::swap;

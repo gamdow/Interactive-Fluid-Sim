@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <typeinfo>
+#include <cassert>
 
 #include "../debug.h"
 #include "../cuda/helper_cuda.h"
@@ -51,6 +52,7 @@ template<class T> void Managed1DArray<T>::resize(Allocator const & _alloc, size_
 }
 
 template<class T> HostArray<T> & HostArray<T>::operator=(DeviceArray<T> const & _in) {
+  assert(this->getSizeBytes() == _in.getSizeBytes());
   checkCudaErrors(cudaMemcpy(*this, _in, this->getSizeBytes(), cudaMemcpyDeviceToHost));
   return *this;
 }

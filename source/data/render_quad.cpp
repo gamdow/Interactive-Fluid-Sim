@@ -6,7 +6,6 @@
 
 #include "../debug.h"
 #include "../cuda/helper_cuda.h"
-#include "../cuda/utility.h"
 #include "../i_render_settings.h"
 
 #include <iostream>
@@ -18,10 +17,14 @@ RenderQuad::RenderQuad(IRenderSettings const & _render_settings, GLint _internal
   , __format(_format)
   , __type(_type)
 {
-  verts[0] = make_float4(-1.f, 1.f, 0.f, 0.f);
-  verts[1] = make_float4(1.f, 1.f, 1.f, 0.f);
-  verts[2] = make_float4(1.f, -1.f, 1.f, 1.f);
-  verts[3] = make_float4(-1.f, -1.f, 0.f, 1.f);
+  __verts[0] = make_float2(-1.f, 1.f);
+  __verts[1] = make_float2(1.f, 1.f);
+  __verts[2] = make_float2(1.f, -1.f);
+  __verts[3] = make_float2(-1.f, -1.f);
+  __uvs[0] = make_float2(0.f, 0.f);
+  __uvs[1] = make_float2(1.f, 0.f);
+  __uvs[2] = make_float2(1.f, 1.f);
+  __uvs[3] = make_float2(0.f, 1.f);
   glGenTextures(1, &__id);
   assert(__id != 0);
   OutputIndent indent;
@@ -41,22 +44,26 @@ void RenderQuad::bindTexture(GLsizei _width, GLsizei _height, GLvoid const * _da
   } glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void RenderQuad::updateVerts() {
-  auto m = __settings.magnification();
-  auto o = __settings.offset();
-  auto s = scale();
-  for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = (verts[i].z * 2.f - 1.f) * m * s.x - o.x;
-    verts[i].y = (1.f - verts[i].w * 2.f) * m * s.y - o.y;
+void RenderQuad::setVerts(QuadArray const & _verts) {
+  QuadArray & v = verts();
+  for(int i = 0; i < NUM_VERTS; ++i) {
+      v[i] = _verts[i];
   }
 }
 
-void RenderQuad::renderVerts() {
+float2 RenderQuad::scaleVerts(float2 _vert, float2 _uv, float _mag, float2 _scale, float2 _offset) const {
+  return _vert * _mag * _scale - _offset;
+}
+
+void RenderQuad::render() {
+  auto mag = __settings.magnification();
+  auto off = __settings.offset();
+  auto scl = scale();
   glBindTexture(GL_TEXTURE_2D, __id); {
     glBegin(GL_QUADS); {
-      for(int i = 0; i < 4; ++i) {
-        float4 const & vert = verts[i];
-        glTexCoord2f(vert.z, vert.w); glVertex2f(vert.x, vert.y);
+      for(int i = 0; i < NUM_VERTS; ++i) {
+        float2 vert = scaleVerts(__verts[i], __uvs[i], mag, scl, off);
+        glTexCoord2f(__uvs[i].x, __uvs[i].y); glVertex2f(vert.x, vert.y);
       }
     } glEnd();
   } glBindTexture(GL_TEXTURE_2D, 0);
@@ -90,22 +97,38 @@ void SurfaceRenderQuad::setSurfaceData(SurfaceWriter const & _writer) {
   _writer.writeToSurface(__surface, resolution());
 }
 
+// void SurfaceRenderQuad::setSurfaceData(OptimalBlockConfig const & _block_config, float const * _buffer, Resolution const & _res) {
+//   copyToSurface(_block_config, __surface, resolution(), _buffer, _res);
+// }
+//
+// void SurfaceRenderQuad::setSurfaceData(OptimalBlockConfig const & _block_config, unsigned char const * _buffer, Resolution const & _res) {
+//   copyToSurface(_block_config, __surface, resolution(), _buffer, _res);
+// }
+
+float const TextRenderQuad::SAFE_SCALE = 0.9f;
+
+TextRenderQuad::TextRenderQuad(IRenderSettings const & _render_settings)
+  : RenderQuad(_render_settings, GL_RGBA, GL_BGRA, GL_UNSIGNED_BYTE)
+  , __surface(nullptr)
+{
+  QuadArray & v = verts();
+  for(int i = 0; i < NUM_VERTS; ++i) {
+      v[i] = make_float2(-1.0f, 1.0f) * SAFE_SCALE;
+  }
+}
+
 void TextRenderQuad::setText(char const * _val) {
   if(*_val == 0) {
     // empty string -> 0 x 0 texture -> seg fault
     _val = " ";
   }
   SDL_FreeSurface(__surface);
-  SDL_Color color = {255, 255, 255, 0};
+  SDL_Color color = {176, 255, 255, 0};
   __surface = TTF_RenderText_Blended_Wrapped(renderSettings().font(), _val, color, 640);
   bindTexture(__surface->w, __surface->h, __surface->pixels);
 }
 
-void TextRenderQuad::__render() {
-  auto s = scale();
-  for(int i = 0; i < num_verts; ++i) {
-    verts[i].x = -.9f + 1.8f * verts[i].z * s.x;
-    verts[i].y = .9f - 1.8f * verts[i].w * s.y;
-  }
-  renderVerts();
+
+float2 TextRenderQuad::scaleVerts(float2 _vert, float2 _uv, float _mag, float2 _scale, float2 _offset) const {
+  return _vert + _uv * _scale * make_float2(2.f, -2.f) * SAFE_SCALE;
 }

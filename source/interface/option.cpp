@@ -9,11 +9,15 @@ OptionBase::OptionBase(char const * _name)
 
 void OptionBase::Update(SDL_Event const & event) {
   if(updateImpl(event)) {
-    std::cout << __name << ": ";
-    reportCurrentImpl(std::cout);
+    reportCurrent(std::cout);
     std::cout << std::endl;
     __changed = true;
   }
+}
+
+void OptionBase::reportCurrent(std::ostream & os) const {
+  os << __name << ": ";
+  __reportCurrent(os);
 }
 
 template<class T>
@@ -40,7 +44,7 @@ bool CycleOption<T>::updateImpl(SDL_Event const & event) {
 }
 
 template<class T>
-void CycleOption<T>::reportCurrentImpl(std::ostream & os) const {
+void CycleOption<T>::__reportCurrent(std::ostream & os) const {
   os << "(" << indexToVal(__cur) << ") " << indexToName(__cur);
 }
 
@@ -77,6 +81,6 @@ bool RangeOption<T>::updateImpl(SDL_Event const & event) {
 }
 
 template<class T>
-void RangeOption<T>::reportCurrentImpl(std::ostream & os) const {
+void RangeOption<T>::__reportCurrent(std::ostream & os) const {
   os << indexToVal(__cur);
 }

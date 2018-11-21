@@ -62,6 +62,14 @@ void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t
   copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
 }
 
+__global__ void copy_to_surface2(cudaSurfaceObject_t o_surface, Resolution _surface_res, float4 const * _buffer, Resolution _buffer_res) {
+  surf2Dwrite<float4>(_buffer[_buffer_res.idx()], o_surface, (_buffer_res.x()) * sizeof(float4), _buffer_res.y());
+}
+
+void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, Resolution const & _buffer_res) {
+  copy_to_surface2<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+}
+
 void print(std::ostream & _out, float4 _v) {
   _out << "(" << _v.x << "," << _v.y << "," << _v.z << "," << _v.w << ")";
 }

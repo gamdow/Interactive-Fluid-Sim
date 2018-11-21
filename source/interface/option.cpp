@@ -48,6 +48,13 @@ void CycleOption<T>::__reportCurrent(std::ostream & os) const {
   os << "(" << indexToVal(__cur) << ") " << indexToName(__cur);
 }
 
+BoolOption::BoolOption(char const * _name, SDL_Keycode _cycle)
+  : CycleOption(_name, _cycle)
+{
+  insert("Off", false);
+  insert("On", true);
+}
+
 template<class T>
 RangeOption<T>::RangeOption(char const * _name, T _ini, T _min, T _max, int _num_steps, SDL_Keycode _up, SDL_Keycode _down)
   : OptionBase(_name)

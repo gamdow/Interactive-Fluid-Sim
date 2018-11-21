@@ -12,5 +12,5 @@ enum FilterMode : int {
   HUE = 0,
   SATURATION,
   LIGHTNESS,
-  BG_SUBTRACT_TRAINED
+  NUM
 };

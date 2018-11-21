@@ -34,6 +34,8 @@ void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t
 
 void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, Resolution const & _buffer_res);
 
+void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, Resolution const & _buffer_res);
+
 struct SurfaceWriter {
   void writeToSurface(cudaSurfaceObject_t o_surface, Resolution const & _surface_res) const {writeToSurfaceImpl(o_surface, _surface_res);}
 private:

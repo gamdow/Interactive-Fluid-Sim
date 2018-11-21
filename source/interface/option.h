@@ -36,6 +36,10 @@ private:
   SDL_Keycode __cycle;
 };
 
+struct BoolOption : public CycleOption<bool> {
+  BoolOption(char const * _name, SDL_Keycode _cycle);
+};
+
 // steps forward and backward over range
 template<class T>
 struct RangeOption : public OptionBase {

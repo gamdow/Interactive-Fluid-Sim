@@ -123,7 +123,7 @@ void TextRenderQuad::setText(char const * _val) {
     _val = " ";
   }
   SDL_FreeSurface(__surface);
-  SDL_Color color = {176, 255, 255, 0};
+  SDL_Color color = {0, 0, 0, 0};
   __surface = TTF_RenderText_Blended_Wrapped(renderSettings().font(), _val, color, 640);
   bindTexture(__surface->w, __surface->h, __surface->pixels);
 }

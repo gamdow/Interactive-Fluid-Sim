@@ -11,13 +11,13 @@ struct CameraFilter : public KernelWrapper
 {
   CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width);
   virtual ~CameraFilter() {}
-  void update(ArrayStructConst<uchar3> _camera_data, int _mode, float _value, float _range);
-  DeviceArray<uchar> const & render() const {return __render;}
+  void update(ArrayStructConst<uchar3> _camera_data, int _mode, bool _bg_subtract, float _value, float _range);
+  DeviceArray<float4> const & render() const {return __render;}
   DeviceArray<float> const & output() const {return __output;}
 private:
   DeviceArray<uchar3> __input;
-  DeviceArray<uchar3> __bg;
-  DeviceArray<uchar> __render;
+  DeviceArray<float> __bg;
+  DeviceArray<float4> __render;
   DeviceArray<float> __output;
   int __last_mode;
 };

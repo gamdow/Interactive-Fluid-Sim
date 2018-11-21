@@ -1,42 +1,45 @@
 #include "camera_filter.h"
 
+#include <iostream>
+
 #include "../interface/enums.h"
 
-__global__ void hsl_filter(float * o_output, uchar * o_render, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, float _value, float _range);
-__global__ void bg_subtract(float * o_output, uchar * o_render, Resolution _out_res, uchar3 const * _bg, uchar3 const * _input, Resolution _in_res, float _range);
+__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode);
+__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, bool _bg_subtract, float _value, float _range);
+__global__ void bg_subtract(float * o_output, float4 * o_render, Resolution _out_res, uchar3 const * _bg, uchar3 const * _input, Resolution _in_res, float _range);
 
 CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width)
   : KernelWrapper(_block_config, _buffer_width)
   , __last_mode(-1)
 {
   format_out << "Constructing Camera Filter Kernel Buffers:" << std::endl;
-  OutputIndent indent;
+  OutputIndent indent;d
   Allocator alloc;
   __output.resize(alloc, buffer_resolution().size);
   __render.resize(alloc, buffer_resolution().size);
+  __bg.resize(alloc, buffer_resolution().size);
 }
 
-void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, int _mode, float _value, float _range) {
+void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, int _mode, bool _bg_subtract, float _value, float _range) {
   if(__input.getSize() != _camera_data.resolution.size) {
     __input.resize(Allocator(), _camera_data.resolution.size);
     __bg.resize(Allocator(), _camera_data.resolution.size);
   }
   checkCudaErrors(cudaMemcpy(__input, _camera_data.data, __input.getSizeBytes(), cudaMemcpyHostToDevice));
 
+  int combined_mode = static_cast<int>(_bg_subtract) * FilterMode::NUM + _mode;
+  if(__last_mode != combined_mode) {
+    __last_mode = combined_mode;
+    bg_hsl_copy<<<grid(),block()>>>(__bg, buffer_resolution(), __input, _camera_data.resolution, _mode);
+  }
+
   switch(_mode) {
     case FilterMode::HUE:
     case FilterMode::SATURATION:
     case FilterMode::LIGHTNESS:
-      hsl_filter<<<grid(),block()>>>(__output, __render, buffer_resolution(), __input, _camera_data.resolution, _mode, _value, _range);
-      break;
-    case FilterMode::BG_SUBTRACT_TRAINED:
-      if(__last_mode != _mode) {
-        __bg = __input;
-      }
-      bg_subtract<<<grid(),block()>>>(__output, __render, buffer_resolution(), __bg, __input, _camera_data.resolution, _range);
+      hsl_filter<<<grid(),block()>>>(__output, __render, __bg, buffer_resolution(), __input, _camera_data.resolution, _mode, _bg_subtract, _value, _range);
       break;
   }
-  __last_mode = _mode;
 }
 
 __device__ float3 rgbToHsv(float3 _rgb) {
@@ -93,58 +96,42 @@ __device__ float3 rgbToHsl(float3 _rgb) {
   return hsl;
 }
 
-__device__ void lerpy(float & _from, float _to) {
-  _from = _to * 0.5f + _from * 0.5f;
+__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode) {
+  int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
+  int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
+  float value = -1.0f;
+  if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
+    uchar3 const & rgb = _input[x + y * _in_res.width];
+    float3 hsl = rgbToHsl(make_float3(rgb.x, rgb.y, rgb.z) / 255.0f);
+    switch(_mode) {
+      case FilterMode::HUE: value = hsl.x; break;
+      case FilterMode::SATURATION: value = hsl.y; break;
+      case FilterMode::LIGHTNESS: value = hsl.z; break;
+      default:
+        break;
+    }
+  }
+  o_bg[_out_res.idx()] = value;
 }
 
-__device__ float hysterises(float _old, float _new) {
-  return _old > 0.5f
-    ? (_new > 0.1f ? 1.f : 0.f)
-    : (_new > 0.9f ? 1.f : 0.f);
-}
-
-__global__ void hsl_filter(float * o_output, uchar * o_render, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, float _value, float _range) {
+__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, bool _bg_subtract, float _value, float _range) {
   int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
   int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
   bool is_fluid = true;
   if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
     uchar3 const & rgb = _input[x + y * _in_res.width];
     float3 hsl = rgbToHsl(make_float3(rgb.x, rgb.y, rgb.z) / 255.0f);
+    float value = _bg_subtract ? _bg[_out_res.idx()] : _value;
     switch(_mode) {
-      case FilterMode::HUE: is_fluid = fabsf(hsl.x - _value) <= (_range / 2.f) || fabsf(hsl.x + 1.f - _value) <= (_range / 2.f) || fabsf(hsl.x - 1.f - _value) <= (_range / 2.f); break;
-      case FilterMode::SATURATION: is_fluid = fabsf(hsl.y - _value) <= _range; break;
-      case FilterMode::LIGHTNESS: is_fluid = fabsf(hsl.z - _value) <= _range; break;
+      case FilterMode::HUE: is_fluid = fabsf(hsl.x - value) <= (_range / 2.f) || fabsf(hsl.x + 1.f - value) <= (_range / 2.f) || fabsf(hsl.x - 1.f - value) <= (_range / 2.f); break;
+      case FilterMode::SATURATION: is_fluid = fabsf(hsl.y - value) <= _range; break;
+      case FilterMode::LIGHTNESS: is_fluid = fabsf(hsl.z - value) <= _range; break;
       default:
         break;
     }
+    o_render[_out_res.idx()] = make_float4(make_float3(is_fluid ? 1.f : 0.f), 1.0f);
+  } else {
+    o_render[_out_res.idx()] = make_float4(0.0f);
   }
   o_output[_out_res.idx()] = is_fluid ? 1.f : 0.f;
-  o_render[_out_res.idx()] = is_fluid ? 255 : 0;
 }
-
-__global__ void bg_subtract(float * o_output, uchar * o_render,  Resolution _out_res, uchar3 const * _bg, uchar3 const * _input, Resolution _in_res, float _range) {
-  int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
-  int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
-  bool is_fluid = true;
-  if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
-    uchar3 const & rgb = _input[x + y * _in_res.width];
-    uchar3 const & bg_rgb = _bg[x + y * _in_res.width];
-    float3 diff = (make_float3(rgb.x, rgb.y, rgb.z) - make_float3(bg_rgb.x, bg_rgb.y, bg_rgb.z)) / 255.f;
-    is_fluid = fabsf(diff.x) + fabsf(diff.y) + fabsf(diff.z) < 3.f * _range;
-  }
-  o_output[_out_res.idx()] = is_fluid ? 1.f : 0.f;
-  o_render[_out_res.idx()] = is_fluid ? 255 : 0;
-}
-
-// __global__ void bg_subtract(float * o_output, Resolution _out_res, uchar3 const * _bg, uchar3 const * _input, Resolution _in_res, float _range) {
-//   int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
-//   int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
-//   float new_val = 1.0f;
-//   if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
-//     uchar3 const & rgb = _input[x + y * _in_res.width];
-//     uchar3 const & bg_rgb = _bg[x + y * _in_res.width];
-//     float3 diff = (make_float3(rgb.x, rgb.y, rgb.z) - make_float3(bg_rgb.x, bg_rgb.y, bg_rgb.z)) / 255.f;
-//     new_val = fabsf(diff.x) + fabsf(diff.y) + fabsf(diff.z) < 3.f * _range ? 1.f : 0.f;
-//   }
-//   o_output[_out_res.idx()] = new_val > 0.5 ? 1.f : 0.f;
-// }

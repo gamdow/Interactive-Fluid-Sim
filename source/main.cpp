@@ -19,7 +19,7 @@ int const VIDCAM_INDEX = 0;
 Resolution const RESOLUTION = Resolution(640, 360);
 int const BUFFER = 10u;
 float2 const LENGTH = {1.6f, 0.9f};
-float const FRAME_RATE = 60.0f;
+float const FRAME_RATE = 30.0f;
 int const SIM_STEPS_PER_FRAME = 3;
 int const PRESSURE_SOLVER_STEPS = 200;
 float TIME_DELTA = 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE);
@@ -51,13 +51,13 @@ int main(int argc, char * argv[]) {
   std::cout << std::endl;
   TextRenderQuad interface_render(renderer);
   TextureRenderQuad camera_render(renderer, GL_RGB, GL_BGR, GL_UNSIGNED_BYTE);
-  SurfaceRenderQuad camera_filter_render(renderer, GL_R8, GL_RED,  GL_UNSIGNED_BYTE, camera_filter.buffer_resolution()); {
+  SurfaceRenderQuad pip_render(renderer, GL_RGBA32F, GL_RGBA,  GL_FLOAT, simulation.visualisation_resolution()); {
     RenderQuad::QuadArray verts;
     verts[0] = make_float2(0.3f, -0.3f);
     verts[1] = make_float2(0.9f, -0.3f);
     verts[2] = make_float2(0.9f, -0.9f);
     verts[3] = make_float2(0.3f, -0.9f);
-    camera_filter_render.setVerts(verts);
+    pip_render.setVerts(verts);
   }
   SurfaceRenderQuad simulation_render(renderer, GL_RGBA32F, GL_RGBA, GL_FLOAT, simulation.visualisation_resolution());
 
@@ -87,7 +87,7 @@ int main(int argc, char * argv[]) {
 
     ArrayStructConst<uchar3> frame_data = camera->frameData();
 
-    camera_filter.update(frame_data, interface.filterMode(), interface.filterValue(), interface.filterRange());
+    camera_filter.update(frame_data, interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
 
     simulation.updateFluidCells(camera_filter.output());
     simulation.applyBoundary();
@@ -100,9 +100,9 @@ int main(int argc, char * argv[]) {
     camera_render.render();
     simulation_render.setSurfaceData(simulation.visualisation_surface_writer());
     simulation_render.render();
-    if(interface.filterChangedRecently()) {
-      camera_filter_render.setSurfaceData(blockConfig, camera_filter.render(), camera_filter.buffer_resolution());
-      camera_filter_render.render();      
+    if(interface.debugMode() || interface.filterChangedRecently()) {
+      pip_render.setSurfaceData(blockConfig, camera_filter.render(), camera_filter.buffer_resolution());
+      pip_render.render();
     }
     interface_render.setText(interface.screenText().c_str());
     interface_render.render();

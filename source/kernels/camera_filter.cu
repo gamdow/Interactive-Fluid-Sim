@@ -4,23 +4,22 @@
 
 #include "../interface/enums.h"
 
-__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode);
-__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, bool _bg_subtract, float _value, float _range);
-__global__ void bg_subtract(float * o_output, float4 * o_render, Resolution _out_res, uchar3 const * _bg, uchar3 const * _input, Resolution _in_res, float _range);
+__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode);
+__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range);
 
 CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width)
   : KernelWrapper(_block_config, _buffer_width)
   , __last_mode(-1)
 {
   format_out << "Constructing Camera Filter Kernel Buffers:" << std::endl;
-  OutputIndent indent;d
+  OutputIndent indent;
   Allocator alloc;
   __output.resize(alloc, buffer_resolution().size);
   __render.resize(alloc, buffer_resolution().size);
   __bg.resize(alloc, buffer_resolution().size);
 }
 
-void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, int _mode, bool _bg_subtract, float _value, float _range) {
+void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range) {
   if(__input.getSize() != _camera_data.resolution.size) {
     __input.resize(Allocator(), _camera_data.resolution.size);
     __bg.resize(Allocator(), _camera_data.resolution.size);
@@ -30,14 +29,14 @@ void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, int _mode, bool
   int combined_mode = static_cast<int>(_bg_subtract) * FilterMode::NUM + _mode;
   if(__last_mode != combined_mode) {
     __last_mode = combined_mode;
-    bg_hsl_copy<<<grid(),block()>>>(__bg, buffer_resolution(), __input, _camera_data.resolution, _mode);
+    bg_hsl_copy<<<grid(),block()>>>(__bg, buffer_resolution(), __input, _camera_data.resolution, _mirror, _mode);
   }
 
   switch(_mode) {
     case FilterMode::HUE:
     case FilterMode::SATURATION:
     case FilterMode::LIGHTNESS:
-      hsl_filter<<<grid(),block()>>>(__output, __render, __bg, buffer_resolution(), __input, _camera_data.resolution, _mode, _bg_subtract, _value, _range);
+      hsl_filter<<<grid(),block()>>>(__output, __render, __bg, buffer_resolution(), __input, _camera_data.resolution, _mirror, _mode, _bg_subtract, _value, _range);
       break;
   }
 }
@@ -96,12 +95,16 @@ __device__ float3 rgbToHsl(float3 _rgb) {
   return hsl;
 }
 
-__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode) {
-  int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
-  int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
+__device__ int2 map_x_y(Resolution const & _out_res, Resolution const & _in_res, bool _mirror) {
+  int2 center = make_int2((_in_res.width - _out_res.width) / 2,   (_in_res.height - _out_res.height) / 2);
+  return center + make_int2(_mirror ? _out_res.width - _out_res.x() : _out_res.x(), _out_res.y());
+}
+
+__global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode) {
+  int2 in_pos = map_x_y(_out_res, _in_res, _mirror);
   float value = -1.0f;
-  if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
-    uchar3 const & rgb = _input[x + y * _in_res.width];
+  if(in_pos.x >= 0 && in_pos.x < _in_res.width && in_pos.y >= 0 && in_pos.y < _in_res.height) {
+    uchar3 const & rgb = _input[in_pos.x + in_pos.y * _in_res.width];
     float3 hsl = rgbToHsl(make_float3(rgb.x, rgb.y, rgb.z) / 255.0f);
     switch(_mode) {
       case FilterMode::HUE: value = hsl.x; break;
@@ -114,12 +117,11 @@ __global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _i
   o_bg[_out_res.idx()] = value;
 }
 
-__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, int _mode, bool _bg_subtract, float _value, float _range) {
-  int x = (_in_res.width - _out_res.width) / 2 + _out_res.x();
-  int y = (_in_res.height - _out_res.height) / 2 + _out_res.y();
+__global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range) {
+  int2 in_pos = map_x_y(_out_res, _in_res, _mirror);
   bool is_fluid = true;
-  if(x >= 0 && x < _in_res.width && y >= 0 && y < _in_res.height) {
-    uchar3 const & rgb = _input[x + y * _in_res.width];
+  if(in_pos.x >= 0 && in_pos.x < _in_res.width && in_pos.y >= 0 && in_pos.y < _in_res.height) {
+    uchar3 const & rgb = _input[in_pos.x + in_pos.y * _in_res.width];
     float3 hsl = rgbToHsl(make_float3(rgb.x, rgb.y, rgb.z) / 255.0f);
     float value = _bg_subtract ? _bg[_out_res.idx()] : _value;
     switch(_mode) {

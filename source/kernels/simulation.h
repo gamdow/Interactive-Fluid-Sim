@@ -31,6 +31,7 @@ protected:
   DeviceArray<float2> __velocity;
   DeviceArray<float4> __smoke;
   DeviceArray<float> __f1_temp;
+  TextureObject<float> __f1_temp_texture;
   TextureObject<float2> __f2_temp_texture;
   TextureObject<float4> __f4_temp_texture;
 };

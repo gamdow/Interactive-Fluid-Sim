@@ -11,7 +11,7 @@ struct CameraFilter : public KernelWrapper
 {
   CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width);
   virtual ~CameraFilter() {}
-  void update(ArrayStructConst<uchar3> _camera_data, int _mode, bool _bg_subtract, float _value, float _range);
+  void update(ArrayStructConst<uchar3> _camera_data, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range);
   DeviceArray<float4> const & render() const {return __render;}
   DeviceArray<float> const & output() const {return __output;}
 private:

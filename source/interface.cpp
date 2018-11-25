@@ -18,11 +18,14 @@ Interface::Interface(float _fps)
   , __filter_value("Filter Value (\'/#)", 1.0f, 0.0f, 1.0f, 101, SDLK_HASH, SDLK_QUOTE)
   , __filter_range("Filter Range ([/])", 0.75f, 0.0f, 1.0f, 101, SDLK_RIGHTBRACKET, SDLK_LEFTBRACKET)
   , __filter_mode("(F)ilter Mode", SDLK_f)
+  , __mirror_cam("(M)irror Camera", SDLK_m)
   , __mode("(V)isualisation Mode", SDLK_v)
   , __debug_mode("(D)ebug Mode", SDLK_d)
   , __bg_subtract("Filter (B)ackground Subtract", SDLK_b)
+  , __flow_rotate("(R)otate Flow", SDLK_r)
   , __mode_show_until(SDL_GetTicks())
   , __filter_show_until(SDL_GetTicks())
+
 {
   __options.push_back(&__debug_mode);
   __options.push_back(&__mode); {
@@ -32,6 +35,13 @@ Interface::Interface(float _fps)
     __mode.insert("Pressure", Mode::pressure);
     __mode.insert("Fluid", Mode::fluid);
   }
+  __options.push_back(&__flow_rotate); {
+    __flow_rotate.insert("Left to Right", FlowDirection::LEFT_TO_RIGHT);
+    __flow_rotate.insert("Top to Bottom", FlowDirection::TOP_TO_BOTTOM);
+    __flow_rotate.insert("Right to Left", FlowDirection::RIGHT_TO_LEFT);
+    __flow_rotate.insert("Bottom to Top", FlowDirection::BOTTOM_TO_TOP);
+  }
+  __options.push_back(&__mirror_cam);
   __options.push_back(&__filter_mode); {
     __filter_mode.insert("Hue", FilterMode::HUE);
     __filter_mode.insert("Saturation", FilterMode::SATURATION);
@@ -78,7 +88,7 @@ std::string Interface::screenText() const {
   os_text.setf(std::ios::fixed, std:: ios::floatfield);
   os_text.precision(2);
   __fps.reportCurrent(os_text);
-    os_text << "  ";
+  os_text << "  ";
   __debug_mode.reportCurrent(os_text);
   if(debugMode()) {
     for(auto i = __options.begin(); i != __options.end(); ++i) {

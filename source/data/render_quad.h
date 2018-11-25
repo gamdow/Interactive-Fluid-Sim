@@ -18,6 +18,7 @@ struct RenderQuad {
   void render();
   void bindTexture(GLsizei _width, GLsizei _height, GLvoid const * _data);
   void setVerts(QuadArray const & _verts);
+  void flipUVs(bool _horizontal, bool _vertical);
 protected:
   GLuint id() const {return __id;}
   Resolution resolution() const {return __resolution;}

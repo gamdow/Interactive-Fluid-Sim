@@ -21,10 +21,7 @@ RenderQuad::RenderQuad(IRenderSettings const & _render_settings, GLint _internal
   __verts[1] = make_float2(1.f, 1.f);
   __verts[2] = make_float2(1.f, -1.f);
   __verts[3] = make_float2(-1.f, -1.f);
-  __uvs[0] = make_float2(0.f, 0.f);
-  __uvs[1] = make_float2(1.f, 0.f);
-  __uvs[2] = make_float2(1.f, 1.f);
-  __uvs[3] = make_float2(0.f, 1.f);
+  flipUVs(false, false);
   glGenTextures(1, &__id);
   assert(__id != 0);
   OutputIndent indent;
@@ -49,6 +46,27 @@ void RenderQuad::setVerts(QuadArray const & _verts) {
   for(int i = 0; i < NUM_VERTS; ++i) {
       v[i] = _verts[i];
   }
+}
+
+void RenderQuad::flipUVs(bool _horizontal, bool _vertical) {
+  int a, b, c, d;
+  if(_horizontal) {
+    if(_vertical) {
+      a = 2; b = 3; c = 0; d = 1;
+    } else {
+      a = 1; b = 0; c = 3; d = 2;
+    }
+  } else {
+    if(_vertical) {
+      a = 3; b = 2; c = 1; d = 0;
+    } else {
+      a = 0; b = 1; c = 2; d = 3;
+    }
+  }
+  __uvs[a] = make_float2(0.f, 0.f);
+  __uvs[b] = make_float2(1.f, 0.f);
+  __uvs[c] = make_float2(1.f, 1.f);
+  __uvs[d] = make_float2(0.f, 1.f);
 }
 
 float2 RenderQuad::scaleVerts(float2 _vert, float2 _uv, float _mag, float2 _scale, float2 _offset) const {
@@ -123,7 +141,7 @@ void TextRenderQuad::setText(char const * _val) {
     _val = " ";
   }
   SDL_FreeSurface(__surface);
-  SDL_Color color = {0, 0, 0, 0};
+  SDL_Color color = {255, 255, 128, 0};
   __surface = TTF_RenderText_Blended_Wrapped(renderSettings().font(), _val, color, 640);
   bindTexture(__surface->w, __surface->h, __surface->pixels);
 }

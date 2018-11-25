@@ -16,12 +16,12 @@
 void quit(int _code, char const * _message);
 
 int const VIDCAM_INDEX = 0;
-Resolution const RESOLUTION = Resolution(640, 360);
+Resolution const RESOLUTION = Resolution(800, 450);//Resolution(640, 360);
 int const BUFFER = 10u;
 float2 const LENGTH = {1.6f, 0.9f};
 float const FRAME_RATE = 30.0f;
-int const SIM_STEPS_PER_FRAME = 3;
-int const PRESSURE_SOLVER_STEPS = 200;
+int const SIM_STEPS_PER_FRAME = 5;
+int const PRESSURE_SOLVER_STEPS = 300;
 float TIME_DELTA = 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE);
 
 int main(int argc, char * argv[]) {
@@ -35,7 +35,7 @@ int main(int argc, char * argv[]) {
 
   std::cout << std::endl;
   float2 const DX = make_float2(LENGTH.x / blockConfig.optimal_res.width, LENGTH.y / blockConfig.optimal_res.height);
-  Simulation simulation(interface, blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
+  Simulation simulation(blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
 
   std::cout << std::endl;
   Camera * camera = nullptr;
@@ -87,13 +87,14 @@ int main(int argc, char * argv[]) {
 
     ArrayStructConst<uchar3> frame_data = camera->frameData();
 
-    camera_filter.update(frame_data, interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
+    camera_render.flipUVs(interface.mirrorCam(), false);
+    camera_filter.update(frame_data, interface.mirrorCam(), interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
 
     simulation.updateFluidCells(camera_filter.output());
-    simulation.applyBoundary();
-    simulation.applySmoke();
+    simulation.applyBoundary(interface.velocity(), interface.flowRotate());
+    simulation.applySmoke(interface.flowRotate());
     for(int i = 0; i < SIM_STEPS_PER_FRAME; ++i) {
-      simulation.step(TIME_DELTA);
+      simulation.step(interface.mode(), TIME_DELTA);
     }
 
     camera_render.bindTexture(frame_data.resolution.width, frame_data.resolution.height, frame_data.data);

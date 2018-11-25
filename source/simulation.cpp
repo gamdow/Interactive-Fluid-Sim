@@ -9,10 +9,9 @@
 #include "interface.h"
 #include "camera.h"
 
-Simulation::Simulation(Interface const & _interface, OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps)
+Simulation::Simulation(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps)
   : __simulation(_block_config, _buffer_width, _dx)
   , __visualisation(_block_config, _buffer_width)
-  , __interface(_interface)
   , PRESSURE_SOLVER_STEPS(_pressure_steps)
   , __min_rgba(make_float4(0.0f))
   , __max_rgba(make_float4(1.0f))
@@ -37,8 +36,8 @@ Simulation::Simulation(Interface const & _interface, OptimalBlockConfig const & 
   __color_map.copyHostToDevice();
 }
 
-void Simulation::step(float _dt) {
-  switch(__interface.mode()) {
+void Simulation::step(int _mode, float _dt) {
+  switch(_mode) {
     case Mode::smoke: __visualisation.visualise(__simulation.smoke(), __color_map.device()); break;
     case Mode::velocity: __visualisation.visualise(__simulation.velocity()); break;
     case Mode::divergence: __visualisation.visualise(__simulation.divergence()); break;
@@ -57,43 +56,127 @@ void Simulation::step(float _dt) {
   __simulation.advectSmoke(_dt);
 }
 
-void Simulation::applyBoundary() {
+void Simulation::applyBoundary(float _velocity_setting, int _flow_rotation) {
   __velocity = __simulation.velocity();
-  float velocity = __interface.velocity();
   Resolution const & buffer_res = __simulation.buffer_resolution();
-  for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
-    for(int i = 0; i < buffer_res.buffer * 2; ++i) {
-      __velocity[i + j * buffer_res.width] = make_float2(velocity, 0.f);
-    }
-    for(int i = buffer_res.width - buffer_res.buffer * 2; i < buffer_res.width; ++i) {
-      __velocity[i + j * buffer_res.width] = make_float2(velocity, 0.f);
-    }
+  switch (_flow_rotation) {
+    case FlowDirection::LEFT_TO_RIGHT:
+    case FlowDirection::RIGHT_TO_LEFT:
+      for(int i = 0; i < buffer_res.width; ++i) {
+        for(int j = 0; j < buffer_res.buffer; ++j) {
+          __fluidCells[i + j * buffer_res.width] = 0.0f;
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, 0.f);
+        }
+        for(int j = buffer_res.height - buffer_res.buffer; j < buffer_res.height; ++j) {
+          __fluidCells[i + j * buffer_res.width] = 0.0f;
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, 0.f);
+        }
+      }
+      break;
+    case FlowDirection::TOP_TO_BOTTOM:
+    case FlowDirection::BOTTOM_TO_TOP:
+      for(int j = 0; j < buffer_res.height; ++j) {
+        for(int i = 0; i < buffer_res.buffer; ++i) {
+          __fluidCells[i + j * buffer_res.width] = 0.0f;
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, 0.f);
+        }
+        for(int i = buffer_res.width - buffer_res.buffer; i < buffer_res.width; ++i) {
+          __fluidCells[i + j * buffer_res.width] = 0.0f;
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, 0.f);
+        }
+      }
+      break;
   }
-  for(int i = 0; i < buffer_res.width; ++i) {
-    for(int j = 0; j < buffer_res.buffer; ++j) {
-      __fluidCells[i + j * buffer_res.width] = 0.0f;
-    }
-    for(int j = buffer_res.height - buffer_res.buffer; j < buffer_res.height; ++j) {
-      __fluidCells[i + j * buffer_res.width] = 0.0f;
-    }
+  switch (_flow_rotation) {
+    case FlowDirection::LEFT_TO_RIGHT:
+    case FlowDirection::RIGHT_TO_LEFT:
+    {
+      float vel = _flow_rotation == FlowDirection::LEFT_TO_RIGHT ? _velocity_setting : -_velocity_setting;
+      for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+        for(int i = 0; i < buffer_res.buffer * 2; ++i) {
+          __velocity[i + j * buffer_res.width] = make_float2(vel, 0.f);
+        }
+        for(int i = buffer_res.width - buffer_res.buffer * 2; i < buffer_res.width; ++i) {
+          __velocity[i + j * buffer_res.width] = make_float2(vel, 0.f);
+        }
+      }
+    } break;
+    case FlowDirection::TOP_TO_BOTTOM:
+    case FlowDirection::BOTTOM_TO_TOP:
+    {
+      float vel = _flow_rotation == FlowDirection::TOP_TO_BOTTOM ? _velocity_setting : -_velocity_setting;
+      for(int i = buffer_res.buffer; i < buffer_res.width - buffer_res.buffer; ++i) {
+        for(int j = 0; j < buffer_res.buffer * 2; ++j) {
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, vel);
+        }
+        for(int j = buffer_res.height - buffer_res.buffer * 2; j < buffer_res.height; ++j) {
+          __velocity[i + j * buffer_res.width] = make_float2(0.f, vel);
+        }
+      }
+    } break;
   }
   __simulation.velocity() = __velocity;
 }
 
-void Simulation::applySmoke() {
+void Simulation::applySmoke(int _flow_rotation) {
   __smoke = __simulation.smoke();
   Resolution const & buffer_res = __simulation.buffer_resolution();
-  for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
-    for(int i = 0; i < buffer_res.buffer * 2; ++i) {
-      int z = (j / 20) % 4;
-      __smoke[i + j * buffer_res.width] = make_float4(
-        z == 0 ? 1.0f : 0.f,
-        z == 1 ? 1.0f : 0.f,
-        z == 2 ? 1.0f : 0.f,
-        z == 3 ? 1.0f : 0.f
-      ) * powf(cosf((j - buffer_res.buffer) * 3.14159f * (2.0f / 40)),2);
-    }
+  int width = 20;
+  switch (_flow_rotation) {
+    case FlowDirection::LEFT_TO_RIGHT:
+      for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+        for(int i = 0; i < buffer_res.buffer * 2; ++i) {
+          int z = (j / width) % 4;
+          __smoke[i + j * buffer_res.width] = make_float4(
+            z == 0 ? 1.0f : 0.f,
+            z == 1 ? 1.0f : 0.f,
+            z == 2 ? 1.0f : 0.f,
+            z == 3 ? 1.0f : 0.f
+          ) * powf(cosf((j - buffer_res.buffer) * 3.14159f * (1.0f / width)), 2) * 1.5f;
+        }
+      }
+      break;
+    case FlowDirection::RIGHT_TO_LEFT:
+      for(int j = buffer_res.buffer; j < buffer_res.height - buffer_res.buffer; ++j) {
+        for(int i = buffer_res.width - buffer_res.buffer * 2; i < buffer_res.width; ++i) {
+          int z = (j / width) % 4;
+          __smoke[i + j * buffer_res.width] = make_float4(
+            z == 0 ? 1.0f : 0.f,
+            z == 1 ? 1.0f : 0.f,
+            z == 2 ? 1.0f : 0.f,
+            z == 3 ? 1.0f : 0.f
+          ) * powf(cosf((j - buffer_res.buffer) * 3.14159f * (1.0f / width)), 2) * 1.5f;
+        }
+      }
+      break;
+    case FlowDirection::TOP_TO_BOTTOM:
+      for(int i = buffer_res.buffer; i < buffer_res.width - buffer_res.buffer; ++i) {
+        for(int j = 0; j < buffer_res.buffer * 2; ++j) {
+          int z = (i / width) % 4;
+          __smoke[i + j * buffer_res.width] = make_float4(
+            z == 0 ? 1.0f : 0.f,
+            z == 1 ? 1.0f : 0.f,
+            z == 2 ? 1.0f : 0.f,
+            z == 3 ? 1.0f : 0.f
+          ) * powf(cosf((i - buffer_res.buffer) * 3.14159f * (1.0f / width)), 2) * 1.5f;
+        }
+      }
+      break;
+    case FlowDirection::BOTTOM_TO_TOP:
+      for(int i = buffer_res.buffer; i < buffer_res.width - buffer_res.buffer; ++i) {
+        for(int j = buffer_res.height - buffer_res.buffer * 2; j < buffer_res.height; ++j) {
+          int z = (i / width) % 4;
+          __smoke[i + j * buffer_res.width] = make_float4(
+            z == 0 ? 1.0f : 0.f,
+            z == 1 ? 1.0f : 0.f,
+            z == 2 ? 1.0f : 0.f,
+            z == 3 ? 1.0f : 0.f
+          ) * powf(cosf((i - buffer_res.buffer) * 3.14159f * (1.0f / width)), 2) * 1.5f;
+        }
+      }
+      break;
   }
+
   __simulation.smoke() = __smoke;
 }
 
@@ -109,14 +192,6 @@ void Simulation::reset() {
     }
   }
 
-  for(int i = 0; i < buffer_res.width; ++i) {
-    for(int j = 0; j < buffer_res.buffer; ++j) {
-      __fluidCells[i + j * buffer_res.width] = 0.0f;
-    }
-    for(int j = buffer_res.height - buffer_res.buffer; j < buffer_res.height; ++j) {
-      __fluidCells[i + j * buffer_res.width] = 0.0f;
-    }
-  }
   __simulation.fluidCells() = __fluidCells;
   __simulation.velocity() = __velocity;
   __simulation.smoke() = __smoke;

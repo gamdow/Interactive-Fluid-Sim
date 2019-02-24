@@ -34,30 +34,30 @@ NullCamera::NullCamera(Resolution _res)
       }
     }
   }
-  for(int i = 0; i < 10; ++i) {
-    for(int j = 0; j < 10; ++j) {
-      {
-        cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
-        e[0] = 255u;
-        e[1] = 255u;
-        e[2] = 255u;
-      }
-      {
-        cv::Vec3b & e = frame().at<cv::Vec3b>(_res.height - j, _res.width - i);
-        e[0] = 255u;
-        e[1] = 255u;
-        e[2] = 255u;
-      }
-    }
-  }
-  for(int i = 0; i < 10; ++i) {
-    for(int j = 0; j < 10; ++j) {
-      cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
-      e[0] = 255u;
-      e[1] = 255u;
-      e[2] = 255u;
-    }
-  }
+  // for(int i = 0; i < 10; ++i) {
+  //   for(int j = 0; j < 10; ++j) {
+  //     {
+  //       cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
+  //       e[0] = 255u;
+  //       e[1] = 255u;
+  //       e[2] = 255u;
+  //     }
+  //     {
+  //       cv::Vec3b & e = frame().at<cv::Vec3b>(_res.height - j, _res.width - i);
+  //       e[0] = 255u;
+  //       e[1] = 255u;
+  //       e[2] = 255u;
+  //     }
+  //   }
+  // }
+  // for(int i = 0; i < 10; ++i) {
+  //   for(int j = 0; j < 10; ++j) {
+  //     cv::Vec3b & e = frame().at<cv::Vec3b>(j, i);
+  //     e[0] = 255u;
+  //     e[1] = 255u;
+  //     e[2] = 255u;
+  //   }
+  // }
 }
 
 CVCamera::CVCamera(int _index, Resolution _res, float _fps)

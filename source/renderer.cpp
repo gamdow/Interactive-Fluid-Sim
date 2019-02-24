@@ -15,7 +15,7 @@ void Renderer::swapBuffers() {
 }
 
 Resolution const & Renderer::__resolution() const {
-  return __opengl.resolution();
+  return __opengl.render_resolution();
 }
 
 float Renderer::__magnification() const {

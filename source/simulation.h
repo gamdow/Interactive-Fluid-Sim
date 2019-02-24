@@ -21,10 +21,11 @@ struct Simulation {
   void applySmoke(int _flow_rotation);
   void reset();
   void updateFluidCells(DeviceArray<float> const & _fluid_cells);
+  int & pressureSolverSteps() {return __pressure_solver_steps;}
 private:
   LBFECCSimulationWrapper __simulation;
   VisualisationWrapper __visualisation;
-  int const PRESSURE_SOLVER_STEPS;
+  int __pressure_solver_steps;
   float4 __min_rgba, __max_rgba;
   HostArray<float> __fluidCells;
   HostArray<float2> __velocity;

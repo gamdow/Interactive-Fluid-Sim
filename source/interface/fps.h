@@ -8,6 +8,7 @@ struct FPS {
   FPS(float _fps);
   void reportCurrent(std::ostream & os) const;
   void updateAndLimitWithDelay();
+  float fpsDelta() const {return __max - __desired;}
 private:
   static float ticksToFps(float);
   static float fpsToTicks(float);

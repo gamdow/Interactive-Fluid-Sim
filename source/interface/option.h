@@ -25,9 +25,10 @@ struct CycleOption : public OptionBase {
   CycleOption(char const * _name, SDL_Keycode _cycle);
   void insert(char const * _name, T _val);
   operator T() const {return indexToVal(__cur);}
+  CycleOption<T> & operator=(T const & _val);
 private:
-  std::string indexToName(int _i) const {return __namedVals[__cur].first;}
-  T indexToVal(int _i) const {return __namedVals[__cur].second;}
+  std::string indexToName(int _i) const {return __namedVals[_i].first;}
+  T indexToVal(int _i) const {return __namedVals[_i].second;}
   virtual bool updateImpl(SDL_Event const & event);
   virtual void __reportCurrent(std::ostream & os) const;
   typedef std::vector< std::pair<std::string, T> > Map;
@@ -38,6 +39,7 @@ private:
 
 struct BoolOption : public CycleOption<bool> {
   BoolOption(char const * _name, SDL_Keycode _cycle);
+  BoolOption & operator=(bool const & _val);
 };
 
 // steps forward and backward over range
@@ -45,6 +47,8 @@ template<class T>
 struct RangeOption : public OptionBase {
   RangeOption(char const * _name, T _ini, T _min, T _max, int _num_steps, SDL_Keycode _up, SDL_Keycode _down);
   operator T() const {return indexToVal(__cur);}
+  RangeOption<T> & operator=(T const & _val);
+  void setCurrent(T _val);
 private:
   int valToIndex(T _v) const;
   T indexToVal(int _i) const {return _i * __step + __min;}

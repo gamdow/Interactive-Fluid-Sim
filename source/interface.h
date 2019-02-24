@@ -13,18 +13,21 @@ struct Interface {
   void updateInputs(SDL_Event const & event);
   void updateChanges();
   void updateAndLimitFps() {__fps.updateAndLimitWithDelay();}
+  float fpsDelta() const {return __fps.fpsDelta();}
   std::string screenText() const;
-  float velocity() const {return __vel_multiplier;}
+  ScaleOption & velocity() {return __vel_multiplier;}
+  ScaleOption & magnification() {return __magnification;}
   float magnification() const {return __magnification;}
   float2 offset() const;
-  float filterValue() const {return __filter_value;}
-  float filterRange() const {return __filter_range;}
-  int filterMode() const {return __filter_mode;}
-  bool bgSubtract() const {return __bg_subtract;}
-  int mode() const {return __mode;}
+  ScaleOption & filterValue() {return __filter_value;}
+  ScaleOption & filterRange() {return __filter_range;}
+  ModeOption & filterMode() {return __filter_mode;}
+  BoolOption & bgSubtract() {return __bg_subtract;}
+  ModeOption & mode() {return __mode;}
+  BoolOption & debugMode() {return __debug_mode;}
   bool debugMode() const {return __debug_mode;}
-  bool mirrorCam() const {return __mirror_cam;}
-  int flowRotate() const {return __flow_rotate;}
+  BoolOption & mirrorCam() {return __mirror_cam;}
+  ModeOption & flowRotate() {return __flow_rotate;}
   bool modeChangedRecently() const {return hasChangedRecently(__mode_show_until);}
   bool filterChangedRecently() const {return hasChangedRecently(__filter_show_until);}
 private:

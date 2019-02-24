@@ -1,6 +1,7 @@
 #include "option.h"
 
 #include <iostream>
+#include <cassert>
 
 OptionBase::OptionBase(char const * _name)
   : __name(_name)
@@ -35,6 +36,18 @@ void CycleOption<T>::insert(char const * _name, T _val) {
 }
 
 template<class T>
+CycleOption<T> & CycleOption<T>::operator=(T const & _val) {
+  for(auto it = __namedVals.begin(); it != __namedVals.end(); ++it) {
+    if(_val == it->second) {
+      __cur = std::distance(__namedVals.begin(), it);
+      return *this;
+    }
+  }
+  assert(false);
+  return *this;
+}
+
+template<class T>
 bool CycleOption<T>::updateImpl(SDL_Event const & event) {
   if(event.type == SDL_KEYUP && event.key.keysym.sym == __cycle) {
     __cur = (__cur + 1) % __namedVals.size();
@@ -55,6 +68,11 @@ BoolOption::BoolOption(char const * _name, SDL_Keycode _cycle)
   insert("On", true);
 }
 
+BoolOption & BoolOption::operator=(bool const & _val) {
+  CycleOption<bool>::operator=(_val);
+  return *this;
+}
+
 template<class T>
 RangeOption<T>::RangeOption(char const * _name, T _ini, T _min, T _max, int _num_steps, SDL_Keycode _up, SDL_Keycode _down)
   : OptionBase(_name)
@@ -65,6 +83,12 @@ RangeOption<T>::RangeOption(char const * _name, T _ini, T _min, T _max, int _num
   , __down(_down)
 {
   __cur = valToIndex(_ini);
+}
+
+template<class T>
+RangeOption<T> & RangeOption<T>::operator=(T const & _val) {
+  __cur = valToIndex(_val);
+  return *this;
 }
 
 template<class T>

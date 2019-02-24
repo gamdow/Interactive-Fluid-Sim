@@ -11,7 +11,7 @@
 
 Interface::Interface(float _fps)
   : __fps(_fps)
-  , __vel_multiplier("Velocity Multiplier (-/=)", 1.0f, 0.1f, 10.0f, 101, SDLK_EQUALS, SDLK_MINUS)
+  , __vel_multiplier("Velocity Multiplier (-/=)", 1.0f, 0.1f, 2.0f, 191, SDLK_EQUALS, SDLK_MINUS)
   , __magnification("Magnification (pgup/pgdn)", 1.0f, 1.0f, 4.0f, 31, SDLK_PAGEUP, SDLK_PAGEDOWN)
   , __offset_x("Offset X-Axis (left/right)", 0.0f, -1.0f, 1.0f, 21, SDLK_RIGHT, SDLK_LEFT)
   , __offset_y("Offset Y-Axis (up/down)", 0.0f, -1.0f, 1.0f, 21, SDLK_UP, SDLK_DOWN)
@@ -33,7 +33,7 @@ Interface::Interface(float _fps)
     __mode.insert("Velocity Field", Mode::velocity);
     __mode.insert("Divergence", Mode::divergence);
     __mode.insert("Pressure", Mode::pressure);
-    __mode.insert("Fluid", Mode::fluid);
+    //__mode.insert("Fluid", Mode::fluid);
   }
   __options.push_back(&__flow_rotate); {
     __flow_rotate.insert("Left to Right", FlowDirection::LEFT_TO_RIGHT);

@@ -7,36 +7,36 @@
 __global__ void bg_hsl_copy(float * o_bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode);
 __global__ void hsl_filter(float * o_output, float4 * o_render, float * _bg, Resolution _out_res, uchar3 const * _input, Resolution _in_res, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range);
 
-CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config, int _buffer_width)
-  : KernelWrapper(_block_config, _buffer_width)
+CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config)
+  : __config(_block_config)
   , __last_mode(-1)
 {
   format_out << "Constructing Camera Filter Kernel Buffers:" << std::endl;
   OutputIndent indent;
   Allocator alloc;
-  __output.resize(alloc, buffer_resolution().size);
-  __render.resize(alloc, buffer_resolution().size);
-  __bg.resize(alloc, buffer_resolution().size);
+  __output.resize(alloc, __config.resolution.total_size());
+  __render.resize(alloc, __config.resolution.total_size());
+  __bg.resize(alloc, __config.resolution.total_size());
 }
 
 void CameraFilter::update(ArrayStructConst<uchar3> _camera_data, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range) {
-  if(__input.getSize() != _camera_data.resolution.size) {
-    __input.resize(Allocator(), _camera_data.resolution.size);
-    __bg.resize(Allocator(), _camera_data.resolution.size);
+  if(__input.getSize() != _camera_data.resolution.total_size()) {
+    __input.resize(Allocator(), _camera_data.resolution.total_size());
+    __bg.resize(Allocator(), _camera_data.resolution.total_size());
   }
   checkCudaErrors(cudaMemcpy(__input, _camera_data.data, __input.getSizeBytes(), cudaMemcpyHostToDevice));
 
   int combined_mode = static_cast<int>(_bg_subtract) * FilterMode::NUM + _mode;
   if(__last_mode != combined_mode) {
     __last_mode = combined_mode;
-    bg_hsl_copy<<<grid(),block()>>>(__bg, buffer_resolution(), __input, _camera_data.resolution, _mirror, _mode);
+    bg_hsl_copy<<<__config.inner_grid,__config.block>>>(__bg, __config.resolution, __input, _camera_data.resolution, _mirror, _mode);
   }
 
   switch(_mode) {
     case FilterMode::HUE:
     case FilterMode::SATURATION:
     case FilterMode::LIGHTNESS:
-      hsl_filter<<<grid(),block()>>>(__output, __render, __bg, buffer_resolution(), __input, _camera_data.resolution, _mirror, _mode, _bg_subtract, _value, _range);
+      hsl_filter<<<__config.inner_grid,__config.block>>>(__output, __render, __bg, __config.resolution, __input, _camera_data.resolution, _mirror, _mode, _bg_subtract, _value, _range);
       break;
   }
 }

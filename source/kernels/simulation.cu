@@ -3,6 +3,7 @@
 #include <cuda_runtime.h>
 
 #include "../data/resolution.h"
+#include "../interface/enums.h"
 
 __global__ void advect_velocity(float2 * o_velocity, cudaTextureObject_t _velocityObj, Resolution _buffer_res, float _dt, float2 _rdx);
 __global__ void limit_advection(float2 * o_e, float2 * _e1, float2 * _e2, Resolution _buffer_res);
@@ -13,23 +14,25 @@ __global__ void pressure_solve(float * o_pressure, float const * _pressure, floa
 __global__ void sub_gradient(float2 * io_velocity, float const * _pressure, float const * _fluid, Resolution _buffer_res, float2 _rdx);
 __global__ void enforce_slip(float2 * io_velocity, float const * _fluid, Resolution _buffer_res);
 __global__ void sum_arrays(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2, Resolution _buffer_res);
+__global__ void apply_smoke(float4 * o_array, Resolution _buffer_res, int _flow_direction);
+__global__ void inject_velocity_and_apply_boundary(float2 * o_velocity, float * o_fluid, Resolution _buffer_res, int _flow_direction, float _velocity_setting);
 
-SimulationWrapper::SimulationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx)
-  : KernelWrapper(_block_config, _buffer_width)
+SimulationWrapper::SimulationWrapper(OptimalBlockConfig const & _block_config, float2 _dx)
+  : __config(_block_config)
   , __dx(_dx)
   , __rdx(make_float2(1.0f / _dx.x, 1.0f / _dx.y))
 {
   format_out << "Constructing Simulation Kernel Buffers:" << std::endl;
   OutputIndent indent;
   Allocator alloc;
-  __fluid_cells.resize(alloc, buffer_resolution().size);
-  __divergence.resize(alloc, buffer_resolution().size);
-  __pressure.resize(alloc, buffer_resolution().size);
-  __velocity.resize(alloc, buffer_resolution().size);
-  __smoke.resize(alloc, buffer_resolution().size);
-  __f1_temp.resize(alloc, buffer_resolution().size);
-  __f2_temp_texture.init(alloc, buffer_resolution());
-  __f4_temp_texture.init(alloc, buffer_resolution());
+  __fluid_cells.resize(alloc, __config.resolution.total_size());
+  __divergence.resize(alloc, __config.resolution.total_size());
+  __pressure.resize(alloc, __config.resolution.total_size());
+  __velocity.resize(alloc, __config.resolution.total_size());
+  __smoke.resize(alloc, __config.resolution.total_size());
+  __f1_temp.resize(alloc, __config.resolution.total_size());
+  __f2_temp_texture.init(alloc, __config.resolution);
+  __f4_temp_texture.init(alloc, __config.resolution);
 }
 
 void SimulationWrapper::advectVelocity(float _dt) {
@@ -37,73 +40,81 @@ void SimulationWrapper::advectVelocity(float _dt) {
 }
 
 void SimulationWrapper::calcDivergence() {
-  calc_divergence<<<grid(),block()>>>(__divergence, __velocity, __fluid_cells, buffer_resolution(), __rdx);
+  calc_divergence<<<__config.inner_grid,__config.block>>>(__divergence, __velocity, __fluid_cells, __config.resolution, __rdx);
 }
 
 void SimulationWrapper::pressureDecay() {
-  pressure_decay<<<grid(),block()>>>(__pressure, __fluid_cells, buffer_resolution());
+  pressure_decay<<<__config.inner_grid,__config.block>>>(__pressure, __fluid_cells, __config.resolution);
 }
 
 void SimulationWrapper::pressureSolveStep() {
-  pressure_solve<<<grid(),block()>>>(__f1_temp, __pressure, __divergence, __fluid_cells, buffer_resolution(), __dx);
+  pressure_solve<<<__config.inner_grid,__config.block>>>(__f1_temp, __pressure, __divergence, __fluid_cells, __config.resolution, __dx);
   swap(__f1_temp, __pressure);
 }
 
 void SimulationWrapper::subGradient() {
-  sub_gradient<<<grid(),block()>>>(__velocity, __pressure, __fluid_cells, buffer_resolution(), __rdx);
+  sub_gradient<<<__config.inner_grid,__config.block>>>(__velocity, __pressure, __fluid_cells, __config.resolution, __rdx);
 }
 
 void SimulationWrapper::enforceSlip() {
-  enforce_slip<<<grid(),block()>>>(__velocity, __fluid_cells, buffer_resolution());
+  enforce_slip<<<__config.inner_grid,__config.block>>>(__velocity, __fluid_cells, __config.resolution);
 }
 
 void SimulationWrapper::advectSmoke(float _dt) {
-  __f4_temp_texture.copyFrom(__smoke, buffer_resolution());
-  apply_advection<<<grid(),block()>>>((float4 *)__smoke, __f4_temp_texture.getObject(), __velocity, __fluid_cells, buffer_resolution(), _dt, __rdx);
+  __f4_temp_texture.copyFrom(__smoke, __config.resolution);
+  apply_advection<<<__config.inner_grid,__config.block>>>((float4 *)__smoke, __f4_temp_texture.getObject(), __velocity, __fluid_cells, __config.resolution, _dt, __rdx);
+}
+
+void SimulationWrapper::applySmoke(int _flow_direction) {
+  apply_smoke<<<__config.inner_grid,__config.block>>>((float4 *)__smoke, __config.resolution, _flow_direction);
+}
+
+void SimulationWrapper::injectVelocityAndApplyBoundary(int _flow_direction, float _velocity_setting) {
+  inject_velocity_and_apply_boundary<<<__config.buffered_grid,__config.block>>>(__velocity, __fluid_cells, __config.resolution, _flow_direction, _velocity_setting);
 }
 
 void SimulationWrapper::advect(float2 * _out, float2 const * _in, float _dt) {
-  __f2_temp_texture.copyFrom(_in, buffer_resolution());
-  advect_velocity<<<grid(),block()>>>(_out, __f2_temp_texture.getObject(), buffer_resolution(), _dt, __rdx);
+  __f2_temp_texture.copyFrom(_in, __config.resolution);
+  advect_velocity<<<__config.inner_grid,__config.block>>>(_out, __f2_temp_texture.getObject(), __config.resolution, _dt, __rdx);
 }
 
-BFECCSimulationWrapper::BFECCSimulationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx)
-  : SimulationWrapper(_block_config, _buffer_width, _dx)
+BFECCSimulationWrapper::BFECCSimulationWrapper(OptimalBlockConfig const & _block_config, float2 _dx)
+  : SimulationWrapper(_block_config, _dx)
 {
   format_out << "Constructing Additional BFECC Simulation Kernel Buffers:" << std::endl;
   Allocator alloc;
-  __f2_temp.resize(alloc, buffer_resolution().size);
+  __f2_temp.resize(alloc, __config.resolution.total_size());
 }
 
 void BFECCSimulationWrapper::advectVelocity(float _dt) {
   advect(__f2_temp, __velocity, _dt);
   advect(__f2_temp, __f2_temp, -_dt);
-  sum_arrays<<<grid(),block()>>>(__velocity, 1.5f, __velocity, -.5f, __f2_temp, buffer_resolution());
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__velocity, 1.5f, __velocity, -.5f, __f2_temp, __config.resolution);
   advect(__velocity, __velocity, _dt);
 }
 
-LBFECCSimulationWrapper::LBFECCSimulationWrapper(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx)
-  : SimulationWrapper(_block_config, _buffer_width, _dx)
+LBFECCSimulationWrapper::LBFECCSimulationWrapper(OptimalBlockConfig const & _block_config, float2 _dx)
+  : SimulationWrapper(_block_config, _dx)
 {
   format_out << "Constructing Additional LBFECC Simulation Kernel Buffers:" << std::endl;
   OutputIndent indent;
   Allocator alloc;
-  __f2_tempA.resize(alloc, buffer_resolution().size);
-  __f2_tempB.resize(alloc, buffer_resolution().size);
-  __f2_tempC.resize(alloc, buffer_resolution().size);
+  __f2_tempA.resize(alloc, __config.resolution.total_size());
+  __f2_tempB.resize(alloc, __config.resolution.total_size());
+  __f2_tempC.resize(alloc, __config.resolution.total_size());
 }
 
 void LBFECCSimulationWrapper::advectVelocity(float _dt) {
   advect(__f2_tempA, __velocity, _dt);
   advect(__f2_tempA, __f2_tempA, -_dt);
-  sum_arrays<<<grid(),block()>>>(__f2_tempB, .5f, __velocity, -.5f, __f2_tempA, buffer_resolution());
-  sum_arrays<<<grid(),block()>>>(__f2_tempA, 1.0f, __velocity, 1.0f, __f2_tempB, buffer_resolution());
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__f2_tempB, .5f, __velocity, -.5f, __f2_tempA, __config.resolution);
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__f2_tempA, 1.0f, __velocity, 1.0f, __f2_tempB, __config.resolution);
   advect(__f2_tempA, __f2_tempA, _dt);
   advect(__f2_tempA, __f2_tempA, -_dt);
-  sum_arrays<<<grid(),block()>>>(__f2_tempA, 1.0f, __f2_tempA, 1.0f, __f2_tempB, buffer_resolution());
-  sum_arrays<<<grid(),block()>>>(__f2_tempA, 1.0f, __velocity, -1.0f, __f2_tempA, buffer_resolution());
-  limit_advection<<<grid(),block()>>>(__f2_tempC, __f2_tempB, __f2_tempA, buffer_resolution());
-  sum_arrays<<<grid(),block()>>>(__velocity, 1.0f, __velocity, 1.0f, __f2_tempC, buffer_resolution());
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__f2_tempA, 1.0f, __f2_tempA, 1.0f, __f2_tempB, __config.resolution);
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__f2_tempA, 1.0f, __velocity, -1.0f, __f2_tempA, __config.resolution);
+  limit_advection<<<__config.inner_grid,__config.block>>>(__f2_tempC, __f2_tempB, __f2_tempA, __config.resolution);
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__velocity, 1.0f, __velocity, 1.0f, __f2_tempC, __config.resolution);
   advect(__velocity, __velocity, _dt);
 }
 
@@ -202,4 +213,84 @@ __global__ void limit_advection(float2 * o_e, float2 * _e1, float2 * _e2, Resolu
 __global__ void sum_arrays(float2 * o_array, float _c1, float2 const * _array1, float _c2, float2 const * _array2, Resolution _buffer_res) {
   int const idx = _buffer_res.idx();
   o_array[idx] = _c1 * _array1[idx] + _c2 * _array2[idx];
+}
+
+__global__ void apply_smoke(float4 * o_array, Resolution _buffer_res, int _flow_direction) {
+  int x_min, x_max, y_min, y_max;
+  switch (_flow_direction) {
+    case FlowDirection::LEFT_TO_RIGHT:
+      x_min = _buffer_res.width.begin();
+      x_max = _buffer_res.width.begin_inner() + _buffer_res.width.buffer;
+      break;
+    case FlowDirection::RIGHT_TO_LEFT:
+      x_min = _buffer_res.width.end_inner() - _buffer_res.width.buffer;
+      x_max = _buffer_res.width.end();
+      break;
+    case FlowDirection::TOP_TO_BOTTOM:
+    case FlowDirection::BOTTOM_TO_TOP:
+      x_min = _buffer_res.width.begin_inner();
+      x_max = _buffer_res.width.end_inner();
+      break;
+  }
+  switch (_flow_direction) {
+    case FlowDirection::LEFT_TO_RIGHT:
+    case FlowDirection::RIGHT_TO_LEFT:
+      y_min = _buffer_res.height.begin_inner();
+      y_max = _buffer_res.height.end_inner();
+      break;
+    case FlowDirection::TOP_TO_BOTTOM:
+      y_min = _buffer_res.height.begin();
+      y_max = _buffer_res.height.begin_inner() + _buffer_res.height.buffer;
+      break;
+    case FlowDirection::BOTTOM_TO_TOP:
+      y_min = _buffer_res.height.end_inner() - _buffer_res.height.buffer;
+      y_max = _buffer_res.height.end();
+      break;
+  }
+
+  if(_buffer_res.x() >= x_min && _buffer_res.x() < x_max && _buffer_res.y() >= y_min && _buffer_res.y() < y_max) {
+    int z = 0;
+    int const width = _buffer_res.height / 20;
+    switch (_flow_direction) {
+      case FlowDirection::LEFT_TO_RIGHT:
+      case FlowDirection::RIGHT_TO_LEFT:
+        z = _buffer_res.y();
+        break;
+      case FlowDirection::TOP_TO_BOTTOM:
+      case FlowDirection::BOTTOM_TO_TOP:
+        z = _buffer_res.x();
+        break;
+    }
+    int c = (z / width) % 4;
+    o_array[_buffer_res.idx()] = make_float4(
+      c == 0 ? 1.0f : 0.f,
+      c == 1 ? 1.0f : 0.f,
+      c == 2 ? 1.0f : 0.f,
+      c == 3 ? 1.0f : 0.f
+    ) * powf(sinf(z * 3.14159f * (1.0f / width)), 2) * 1.5f;
+  }
+}
+
+__global__ void inject_velocity_and_apply_boundary(float2 * o_velocity, float * o_fluid, Resolution _buffer_res, int _flow_direction, float _velocity_setting) {
+  int const idx = _buffer_res.buffer_idx();
+  switch (_flow_direction) {
+    case FlowDirection::LEFT_TO_RIGHT:
+    case FlowDirection::RIGHT_TO_LEFT:
+      if(_buffer_res.j() < _buffer_res.height.begin_inner() || _buffer_res.j() >= _buffer_res.height.end_inner()) {
+        o_fluid[idx] = 0.0f;
+        o_velocity[idx] = make_float2(0.f, 0.f);
+      } else if(_buffer_res.i() < _buffer_res.width.begin_inner() + _buffer_res.width.buffer || _buffer_res.i() >= _buffer_res.width.end_inner() - _buffer_res.width.buffer) {
+        o_velocity[idx] = make_float2((_flow_direction == FlowDirection::LEFT_TO_RIGHT ? 1.0f : -1.0f) * _velocity_setting, 0.f);
+      }
+      break;
+    case FlowDirection::TOP_TO_BOTTOM:
+    case FlowDirection::BOTTOM_TO_TOP:
+      if(_buffer_res.i() < _buffer_res.width.begin_inner() || _buffer_res.i() >= _buffer_res.width.end_inner()) {
+        o_fluid[idx] = 0.0f;
+        o_velocity[idx] = make_float2(0.f, 0.f);
+      } else if(_buffer_res.j() < _buffer_res.height.begin_inner() + _buffer_res.height.buffer || _buffer_res.j() >= _buffer_res.height.end_inner() - _buffer_res.height.buffer) {
+        o_velocity[idx] = make_float2(0.f, (_flow_direction == FlowDirection::TOP_TO_BOTTOM ? 1.0f : -1.0f) * _velocity_setting);
+      }
+      break;
+  }
 }

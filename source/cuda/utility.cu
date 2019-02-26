@@ -21,18 +21,19 @@ void reportCudaCapability() {
   }
 }
 
-OptimalBlockConfig::OptimalBlockConfig(Resolution _res)
-{
+// Use CUDA's occupancy to determine the optimal blocksize and adjust the screen (and therefore array) resolution to be an integer multiple (then there's no need for bounds checking in the kernels).
+OptimalBlockConfig::OptimalBlockConfig(Resolution _res) {
   format_out << "Optimising Blocksize:" << std::endl;
-  // Use CUDA's occupancy to determine the optimal blocksize and adjust the screen (and therefore array) resolution to be an integer multiple (then there's no need for bounds checking in the kernels).
-  int blockSize, minGridSize; cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, pressure_solve, 0, _res.size);
-  block = dim3(32u, blockSize / 32u);
   OutputIndent indent1;
-  Resolution(block.x, block.y).print("Optimal Block");
-  grid = dim3(_res.width / block.x, _res.height / block.y);
-  optimal_res = Resolution(grid.x * block.x, grid.y * block.y);
   _res.print("Desired Resolution");
-  optimal_res.print("Adjusted Resolution");
+  int blockSize, minGridSize; cudaOccupancyMaxPotentialBlockSize(&minGridSize, &blockSize, pressure_solve, 0, _res.inner_size());
+  block = dim3(32u, blockSize / 32u);
+  Resolution(block.x, block.y).print("Optimal Block");
+  inner_grid = dim3(_res.width.inner / block.x, _res.height.inner / block.y);
+  dim3 buffer_blocks((2 * _res.width.buffer + block.x - 1) / block.x, (2 * _res.height.buffer + block.y - 1) / block.y);
+  buffered_grid = inner_grid + buffer_blocks;
+  resolution = Resolution(inner_grid.x * block.x, inner_grid.y * block.y, buffer_blocks.x * block.x / 2, buffer_blocks.y * block.y / 2);
+  resolution.print("Adjusted Resolution");
 }
 
 __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, uchar3 const * _buffer, Resolution _buffer_res) {
@@ -43,7 +44,7 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
 }
 
 void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, uchar3 const * _buffer, Resolution const & _buffer_res) {
-  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+  copy_to_surface<<<_block_config.inner_grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
 }
 
 __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, float const * _buffer, Resolution _buffer_res) {
@@ -51,7 +52,7 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
 }
 
 void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float const * _buffer, Resolution const & _buffer_res) {
-  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+  copy_to_surface<<<_block_config.inner_grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
 }
 
 __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surface_res, unsigned char const * _buffer, Resolution _buffer_res) {
@@ -59,7 +60,7 @@ __global__ void copy_to_surface(cudaSurfaceObject_t o_surface, Resolution _surfa
 }
 
 void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, unsigned char const * _buffer, Resolution const & _buffer_res) {
-  copy_to_surface<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+  copy_to_surface<<<_block_config.inner_grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
 }
 
 __global__ void copy_to_surface2(cudaSurfaceObject_t o_surface, Resolution _surface_res, float4 const * _buffer, Resolution _buffer_res) {
@@ -67,7 +68,7 @@ __global__ void copy_to_surface2(cudaSurfaceObject_t o_surface, Resolution _surf
 }
 
 void copyToSurface(OptimalBlockConfig const & _block_config, cudaSurfaceObject_t o_surface, Resolution const & _surface_res, float4 const * _buffer, Resolution const & _buffer_res) {
-  copy_to_surface2<<<_block_config.grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
+  copy_to_surface2<<<_block_config.inner_grid, _block_config.block>>>(o_surface, _surface_res, _buffer, _buffer_res);
 }
 
 void print(std::ostream & _out, float4 _v) {

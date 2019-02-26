@@ -21,7 +21,7 @@ OpenGL::OpenGL(Resolution _render_res, bool _fullscreen)
   OutputIndent indent1;
   Resolution window_res = _fullscreen ? Resolution(display_mode.w, display_mode.h) : __render_resolution;
   window_res.print("Window Resolution");
-  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_res.width, window_res.height, SDL_WINDOW_OPENGL);
+  __window = SDL_CreateWindow("", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, window_res.width.inner, window_res.height.inner, SDL_WINDOW_OPENGL);
   if(__window == nullptr) {
     throwFailure(SDL_GetError());
   }
@@ -77,7 +77,7 @@ void OpenGL::toggleFullscreen() {
   bool fullscreen = SDL_GetWindowFlags(__window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
   if(fullscreen) {
     SDL_SetWindowFullscreen(__window, 0);
-    SDL_SetWindowSize(__window, __render_resolution.width, __render_resolution.height);
+    SDL_SetWindowSize(__window, __render_resolution.width.inner, __render_resolution.height.inner);
     SDL_SetWindowPosition(__window, SDL_WINDOWPOS_CENTERED,  SDL_WINDOWPOS_CENTERED);
   } else {
     SDL_DisplayMode display_mode;

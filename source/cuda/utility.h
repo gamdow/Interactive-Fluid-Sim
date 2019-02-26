@@ -22,8 +22,8 @@ void reportCudaCapability();
 
 struct OptimalBlockConfig {
   OptimalBlockConfig(Resolution _res);
-  Resolution optimal_res;
-  dim3 grid, block;
+  Resolution resolution;
+  dim3 block, inner_grid, buffered_grid;
 };
 
 void print(std::ostream & _out, float4 _v);

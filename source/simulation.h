@@ -12,9 +12,9 @@ struct KernelsWrapper;
 struct Camera;
 
 struct Simulation {
-  Simulation(OptimalBlockConfig const & _block_config, int _buffer_width, float2 _dx, int _pressure_steps);
+  Simulation(OptimalBlockConfig const & _block_config, float2 _dx, int _pressure_steps);
   virtual ~Simulation() {}
-  Resolution const & visualisation_resolution() const {return __visualisation.buffer_resolution();}
+  Resolution const & visualisation_resolution() const {return __visualisation.resolution();}
   SurfaceWriter const & visualisation_surface_writer() const {return __visualisation;}
   void step(int _mode, float _dt);
   void applyBoundary(float _velocity_setting, int _flow_rotation);
@@ -31,4 +31,5 @@ private:
   HostArray<float2> __velocity;
   HostArray<float4> __smoke;
   MirroredArray<float3> __color_map;
+  int __last_mode;
 };

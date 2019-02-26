@@ -7,7 +7,7 @@ CPP_SRC = $(wildcard $(addsuffix *.cpp,$(SUBDIRS)))
 # CU_SRC = $(wildcard $(SOURCEDIR)/**/*.cu)
 CU_SRC = $(wildcard $(addsuffix *.cu,$(SUBDIRS)))
 # OBJS = $(patsubst $(SOURCEDIR)/%.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(CPP_SRC))
-OBJS = $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(CPP_SRC)) $(patsubst $(SOURCEDIR)/%.cu,$(BUILDDIR)/%.o,$(CU_SRC))
+OBJS = $(patsubst $(SOURCEDIR)/%.cu,$(BUILDDIR)/%.o,$(CU_SRC)) $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(CPP_SRC)) 
 # HEADERS = $(wildcard $(SOURCEDIR)/**/*.hpp) $(wildcard $(SOURCEDIR)/*.cuh)
 HEADERS = $(wildcard $(addsuffix *.h,$(SUBDIRS)))
 

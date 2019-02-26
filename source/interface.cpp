@@ -25,6 +25,7 @@ Interface::Interface(float _fps)
   , __flow_rotate("(R)otate Flow", SDLK_r)
   , __mode_show_until(SDL_GetTicks())
   , __filter_show_until(SDL_GetTicks())
+  , __fps_show_until(SDL_GetTicks() + FPS_SHOW_DURATION)
 
 {
   __options.push_back(&__debug_mode);
@@ -87,9 +88,11 @@ std::string Interface::screenText() const {
   std::stringstream os_text;
   os_text.setf(std::ios::fixed, std:: ios::floatfield);
   os_text.precision(2);
-  __fps.reportCurrent(os_text);
-  os_text << "  ";
-  __debug_mode.reportCurrent(os_text);
+  if(hasChangedRecently(__fps_show_until) || debugMode() || modeChangedRecently() || filterChangedRecently()) {
+    __fps.reportCurrent(os_text);
+    os_text << "  ";
+    __debug_mode.reportCurrent(os_text);
+  }
   if(debugMode()) {
     for(auto i = __options.begin(); i != __options.end(); ++i) {
       if(*i != &__debug_mode) {

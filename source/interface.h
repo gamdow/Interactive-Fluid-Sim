@@ -37,6 +37,7 @@ private:
   ModeOption __filter_mode, __mode, __flow_rotate;
   BoolOption __debug_mode, __bg_subtract, __mirror_cam;
   std::vector<OptionBase*> __options;
+  static Uint32 const FPS_SHOW_DURATION = 10000; // ms
   static Uint32 const DEBUG_SHOW_DURATION = 3000; // ms
-  Uint32 __mode_show_until, __filter_show_until;
+  Uint32 __fps_show_until, __mode_show_until, __filter_show_until;
 };

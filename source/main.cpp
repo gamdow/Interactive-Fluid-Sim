@@ -43,16 +43,16 @@ int main(int argc, char * argv[]) {
   std::cout << std::endl;
   OpenGL opengl(RESOLUTION, FULLSCREEN);
   reportCudaCapability();
-  OptimalBlockConfig blockConfig(RESOLUTION);
+  OptimalBlockConfig blockConfig(Resolution(RESOLUTION, BUFFER, BUFFER));
   Interface interface(FRAME_RATE);
   defaultInterface(interface);
   Renderer renderer(interface, opengl);
 
   std::cout << std::endl;
   float const TIME_DELTA = 1.0f / (SIM_STEPS_PER_FRAME * FRAME_RATE);
-  float2 const DX = make_float2(LENGTH.x / blockConfig.optimal_res.width, LENGTH.y / blockConfig.optimal_res.height);
+  float2 const DX = make_float2(LENGTH.x / blockConfig.resolution.width, LENGTH.y / blockConfig.resolution.height);
   float const MAX_VELOCITY = DX.y / TIME_DELTA;
-  Simulation simulation(blockConfig, BUFFER, DX, PRESSURE_SOLVER_STEPS);
+  Simulation simulation(blockConfig, DX, PRESSURE_SOLVER_STEPS);
 
   std::cout << std::endl;
   Camera * camera = nullptr;
@@ -65,7 +65,7 @@ int main(int argc, char * argv[]) {
     interface.filterMode() = FilterMode::LIGHTNESS;
     interface.filterValue() = 0.0f;
   }
-  CameraFilter camera_filter(blockConfig, BUFFER);
+  CameraFilter camera_filter(blockConfig);
 
   std::cout << std::endl;
   TextRenderQuad interface_render(renderer);
@@ -93,7 +93,7 @@ int main(int argc, char * argv[]) {
       switch(event.type) {
         case SDL_KEYDOWN:
           switch(event.key.keysym.sym) {
-            case SDLK_a: simulation.reset(); break;
+            case SDLK_BACKSPACE: simulation.reset(); break;
             case SDLK_ESCAPE: stop = true; break;
             case SDLK_RETURN: if(event.key.keysym.mod & KMOD_ALT) opengl.toggleFullscreen(); break;
             defaut: break;
@@ -123,7 +123,7 @@ int main(int argc, char * argv[]) {
     simulation_render.setSurfaceData(simulation.visualisation_surface_writer());
     simulation_render.render();
     if(interface.debugMode() || interface.filterChangedRecently()) {
-      pip_render.setSurfaceData(blockConfig, camera_filter.render(), camera_filter.buffer_resolution());
+      pip_render.setSurfaceData(blockConfig, camera_filter.render(), camera_filter.resolution());
       pip_render.render();
     }
     interface_render.setText(interface.screenText().c_str());

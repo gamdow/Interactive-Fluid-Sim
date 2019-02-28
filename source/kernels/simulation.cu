@@ -73,6 +73,10 @@ void SimulationWrapper::injectVelocityAndApplyBoundary(int _flow_direction, floa
   inject_velocity_and_apply_boundary<<<__config.buffered_grid,__config.block>>>(__velocity, __fluid_cells, __config.resolution, _flow_direction, _velocity_setting);
 }
 
+void SimulationWrapper::addFlow(DeviceArray<float2> const & _flow, float _dt) {
+  sum_arrays<<<__config.inner_grid,__config.block>>>(__velocity, 1.0f, __velocity, _dt, _flow, __config.resolution);
+}
+
 void SimulationWrapper::advect(float2 * _out, float2 const * _in, float _dt) {
   __f2_temp_texture.copyFrom(_in, __config.resolution);
   advect_velocity<<<__config.inner_grid,__config.block>>>(_out, __f2_temp_texture.getObject(), __config.resolution, _dt, __rdx);
@@ -250,7 +254,7 @@ __global__ void apply_smoke(float4 * o_array, Resolution _buffer_res, int _flow_
 
   if(_buffer_res.x() >= x_min && _buffer_res.x() < x_max && _buffer_res.y() >= y_min && _buffer_res.y() < y_max) {
     int z = 0;
-    int const width = _buffer_res.height / 20;
+    int const width = _buffer_res.height / 25;
     switch (_flow_direction) {
       case FlowDirection::LEFT_TO_RIGHT:
       case FlowDirection::RIGHT_TO_LEFT:

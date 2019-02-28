@@ -11,6 +11,7 @@ Camera::Camera(Resolution const & _res, cv::Mat const & _mat)
   : __resolution(_res)
   , __frame(_mat)
 {
+  __flow = cv::Mat::zeros(__resolution.width, __resolution.height, CV_32FC2);
 }
 
 NullCamera::NullCamera(Resolution _res)
@@ -60,8 +61,9 @@ NullCamera::NullCamera(Resolution _res)
   // }
 }
 
-CVCamera::CVCamera(int _index, Resolution _res, float _fps)
+CVCamera::CVCamera(bool _optical_flow, int _index, Resolution _res, float _fps)
   : __camera(_index)
+  , __capture(_optical_flow)
 {
   format_out << "OpenCV Camera:" << std::endl;
   OutputIndent indent;
@@ -78,12 +80,15 @@ CVCamera::CVCamera(int _index, Resolution _res, float _fps)
     throwFailure(error.str());
   }
   reportFrameInfo();
-  __capture.start(__camera, frame());
+  frame().copyTo(lastFrame());
+  flow() = cv::Mat::zeros(resolution().width, resolution().height, CV_32FC2);
+  __capture.start(__camera, frame(), lastFrame(), flow(), time_delta());
 }
 
-void CVCamera::Thread::start(cv::VideoCapture & _cam, cv::Mat & _frame) {
+void CVCamera::Thread::start(cv::VideoCapture & _cam, cv::Mat & _frame, cv::Mat & _last_frame, cv::Mat & _flow, float & _dt) {
   __continue = true;
-  __capture = std::thread(&Thread::capture, this, std::ref(_cam), std::ref(_frame));
+  __last_ticks = SDL_GetTicks();
+  __capture = std::thread(&Thread::capture, this, std::ref(_cam), std::ref(_frame), std::ref(_last_frame), std::ref(_flow), std::ref(_dt));
 }
 
 void CVCamera::Thread::stop() {
@@ -93,9 +98,18 @@ void CVCamera::Thread::stop() {
   }
 }
 
-void CVCamera::Thread::capture(cv::VideoCapture & _cam, cv::Mat & _frame) {
+void CVCamera::Thread::capture(cv::VideoCapture & _cam, cv::Mat & _frame, cv::Mat & _last_frame, cv::Mat & _flow, float & _dt) {
   while(__continue) {
-    _cam.read(_frame);
+    if(_cam.grab()){
+      _frame.copyTo(_last_frame);
+      _cam.retrieve(_frame);
+      auto ticks = SDL_GetTicks();
+      _dt = (ticks - __last_ticks) / 1000.0f;
+      __last_ticks = ticks;
+      if(OPTICAL_FLOW) {
+        cv::optflow::calcOpticalFlowSparseToDense(_last_frame, _frame, _flow);
+      }
+    }
   }
 }
 

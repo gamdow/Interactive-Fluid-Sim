@@ -1,6 +1,7 @@
 #include "visualisation.h"
+#include "shared.h"
 
-float const PI = 3.14159265359f;
+//float const PI = 3.14159265359f;
 
 void lerp(float & _from, float _to) {
   _from = _to * 0.02f + _from * 0.98f;
@@ -88,22 +89,7 @@ __global__ void scalar_to_rgba(float4 * o_buffer, float const * _buffer, Resolut
 // Render 2D field (i.e. velocity) by treating as HSV (hue=direction, saturation=1, value=magnitude) and converting to RGBA
 __global__ void vector_field_to_rgba(float4 * o_buffer, float2 const * _buffer, Resolution _buffer_res, float _power) {
   int const idx = _buffer_res.idx();
-  float v = __powf(_buffer[idx].x * _buffer[idx].x + _buffer[idx].y * _buffer[idx].y, _power);
-  float h = 6.0f * (atan2f(-_buffer[idx].x, -_buffer[idx].y) / (2 * PI) + 0.5);
-  float hi = floorf(h);
-  float f = h - hi;
-  float q = v * (1 - f);
-  float t = v * f;
-  float3 rgb;
-  switch((int)hi) {
-    default: rgb = make_float3(v, t, 0.0f); break;
-    case 1: rgb = make_float3(q, v, 0.0f); break;
-    case 2: rgb = make_float3(0.0f, v, t); break;
-    case 3: rgb = make_float3(0.0f, q, v); break;
-    case 4: rgb = make_float3(t, 0.0f, v); break;
-    case 5: rgb = make_float3(v, 0.0f, q); break;
-  }
-  o_buffer[idx] = make_float4(rgb, fmin(rgb.x + rgb.y + rgb.z, 1.f));
+  o_buffer[idx] = float2_to_hsl(_buffer[idx], _power);
 }
 
 // Render 4D field by operating on it with a 4x3 matrix, where the rows are RGB values (a colour for each dimension).

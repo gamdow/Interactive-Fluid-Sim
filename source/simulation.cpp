@@ -17,7 +17,7 @@ Simulation::Simulation(OptimalBlockConfig const & _block_config, float2 _dx, int
   , __max_rgba(make_float4(1.0f))
   , __last_mode(-1)
 {
-  format_out << "Constructing Simluation Buffers:" << std::endl;
+  format_out << "Constructing Simulation Buffers:" << std::endl;
   OutputIndent indent1;
   __simulation.resolution().print("Resolution");
   {
@@ -94,4 +94,8 @@ void Simulation::reset() {
 
 void Simulation::updateFluidCells(DeviceArray<float> const & _fluid_cells) {
   __simulation.fluidCells() = _fluid_cells;
+}
+
+void Simulation::addFlow(DeviceArray<float2> const & _velocity, float _dt) {
+  __simulation.addFlow(_velocity, _dt);
 }

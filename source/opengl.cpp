@@ -34,7 +34,7 @@ OpenGL::OpenGL(Resolution _render_res, bool _fullscreen)
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-  SDL_GL_SetSwapInterval(0); // V-Sync off for max speed
+  SDL_GL_SetSwapInterval(1); // V-Sync off for max speed
 
   __context = SDL_GL_CreateContext(__window);
   if(__context == nullptr) {

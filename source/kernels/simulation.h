@@ -24,6 +24,7 @@ struct SimulationWrapper {
   void advectSmoke(float _dt);
   void applySmoke(int _flow_direction);
   void injectVelocityAndApplyBoundary(int _flow_direction, float _velocity_setting);
+  void addFlow(DeviceArray<float2> const & _flow, float _dt);
 protected:
   void advect(float2 * _out, float2 const * _in, float _dt);
   float2 __dx;

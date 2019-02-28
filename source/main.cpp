@@ -14,15 +14,25 @@
 #include "renderer.h"
 #include "data/render_quad.h"
 
-
+bool const FULLSCREEN = false;//true;
 int const VIDCAM_INDEX = 0;
-Resolution const RESOLUTION = Resolution(800, 450);//Resolution(640, 360);//
-bool const FULLSCREEN = true;
 int const BUFFER = 10u;
 float2 const LENGTH = {1.6f, 0.9f};
+
+bool const OPTICAL_FLOW = false;
+Resolution const RESOLUTION = Resolution(1280, 720);
 float const FRAME_RATE = 30.0f;
 int const SIM_STEPS_PER_FRAME = 3;
-int const PRESSURE_SOLVER_STEPS = 200;
+int const PRESSURE_SOLVER_STEPS = 100;
+
+// bool const OPTICAL_FLOW = true;
+// Resolution const RESOLUTION = Resolution(640, 360);
+// float const FRAME_RATE = 15.0f;
+// int const SIM_STEPS_PER_FRAME = 1;
+// int const PRESSURE_SOLVER_STEPS = 200;
+
+float const SOLVER_FPS_TUNER_DAMPING = 0.1f;
+float const SOLVER_FPS_TUNER_DECAY = 0.999f;
 
 void defaultInterface(Interface & interface) {
   interface.velocity() = 1.0f;
@@ -57,7 +67,7 @@ int main(int argc, char * argv[]) {
   std::cout << std::endl;
   Camera * camera = nullptr;
   try {
-    camera = new CVCamera(VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
+    camera = new CVCamera(OPTICAL_FLOW, VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
   } catch (std::exception const & e) {
     std::cout << e.what() << std::endl << std::endl;
     delete camera;
@@ -82,6 +92,7 @@ int main(int argc, char * argv[]) {
 
   std::cout << std::endl << "dx = " << DX.x << "," << DX.y << " Max Velocity = " << MAX_VELOCITY;
 
+  float tuner_damping = SOLVER_FPS_TUNER_DAMPING;
   bool stop = false;
   SDL_Event event;
   float pressure_solve_steps_float = static_cast<float>(PRESSURE_SOLVER_STEPS);
@@ -106,18 +117,19 @@ int main(int argc, char * argv[]) {
 
     if(stop) break;
 
-    ArrayStructConst<uchar3> frame_data = camera->frameData();
+    // std::cout << "camera dt: " << camera->time_delta() << " " << 1 / camera->time_delta() << std::endl;
+    camera_filter.update(camera->frameData(), camera->flowData(), interface.mirrorCam(), interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
 
-    camera_render.flipUVs(interface.mirrorCam(), false);
-    camera_filter.update(frame_data, interface.mirrorCam(), interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
-
-    simulation.updateFluidCells(camera_filter.output());
+    simulation.updateFluidCells(camera_filter.fluidOutput());
+    simulation.addFlow(camera_filter.velocityOutput(), 1.0f / FRAME_RATE);
     simulation.applyBoundary(interface.velocity() * MAX_VELOCITY, interface.flowRotate());
     simulation.applySmoke(interface.flowRotate());
     for(int i = 0; i < SIM_STEPS_PER_FRAME; ++i) {
       simulation.step(interface.mode(), TIME_DELTA);
     }
 
+    ArrayStructConst<uchar3> frame_data = camera->frameData();
+    camera_render.flipUVs(interface.mirrorCam(), false);
     camera_render.bindTexture(frame_data.resolution.width, frame_data.resolution.height, frame_data.data);
     camera_render.render();
     simulation_render.setSurfaceData(simulation.visualisation_surface_writer());
@@ -133,7 +145,8 @@ int main(int argc, char * argv[]) {
     interface.updateAndLimitFps();
 
     // try to tune the number of pressure solver steps to match the desired fps
-    pressure_solve_steps_float += 0.1f * interface.fpsDelta();
+    pressure_solve_steps_float += tuner_damping * interface.fpsDelta();
+    tuner_damping *= SOLVER_FPS_TUNER_DECAY;
     simulation.pressureSolverSteps() = static_cast<int>(pressure_solve_steps_float + 0.5f);
   }
 

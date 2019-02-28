@@ -7,7 +7,7 @@
 std::ostream & operator<<(std::ostream & stream, BufferedDimension const & dim) {
   stream << dim.inner;
   if(dim.buffer != 0) {
-    stream << " (+ " << dim.buffer << ")";
+    stream << " (+2*" << dim.buffer << ")";
   }
   return stream;
 }

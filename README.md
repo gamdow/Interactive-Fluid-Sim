@@ -14,4 +14,4 @@ Currently working on Ubuntu 18.04.2 LTS
 
 ### OpenCV
 
-`sudo apt install libopencv-dev`
+`$ sudo apt install libopencv-dev`

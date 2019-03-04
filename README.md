@@ -8,10 +8,10 @@ Currently working on Ubuntu 18.04.2 LTS
 
 `$ sudo apt install nvidia-cuda-toolkit`
 
-## SDL + OpenGL
+### SDL + OpenGL
 
 `$ sudo apt install libsdl2-dev libsdl2-ttf-dev libglew-dev`
 
-## OpenCV
+### OpenCV
 
 `sudo apt install libopencv-dev`

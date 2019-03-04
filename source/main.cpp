@@ -14,16 +14,16 @@
 #include "renderer.h"
 #include "data/render_quad.h"
 
-bool const FULLSCREEN = false;//true;
-int const VIDCAM_INDEX = 0;
-int const BUFFER = 10u;
-float2 const LENGTH = {1.6f, 0.9f};
+bool const FULLSCREEN = true;//true;
+int const VIDCAM_INDEX = 0; //normally 0 if only one webcam
+int const BUFFER = 10u; // needed for advection which could sample outside renderable area
+float2 const LENGTH = {1.6f, 0.9f}; // dimension of the simulation
 
-bool const OPTICAL_FLOW = false;
-Resolution const RESOLUTION = Resolution(1280, 720);
-float const FRAME_RATE = 30.0f;
-int const SIM_STEPS_PER_FRAME = 3;
-int const PRESSURE_SOLVER_STEPS = 100;
+bool const OPTICAL_FLOW = false; // very (10x) slow
+Resolution const RESOLUTION = Resolution(1280, 720); // higher -> slower
+float const FRAME_RATE = 30.0f; // target, will tune PSS to reach
+int const SIM_STEPS_PER_FRAME = 5; // higher -> higher max speed
+int const PRESSURE_SOLVER_STEPS = 100; // autotuned, good guess minimise oscillation at start
 
 // bool const OPTICAL_FLOW = true;
 // Resolution const RESOLUTION = Resolution(640, 360);

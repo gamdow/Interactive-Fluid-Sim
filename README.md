@@ -15,3 +15,10 @@ Currently working on Ubuntu 18.04.2 LTS
 ### OpenCV
 
 `$ sudo apt install libopencv-dev`
+
+## Recommended
+
+### v4l2ucp
+`$ sudo apt install v4l2ucp`
+http://v4l2ucp.sourceforge.net
+Configure webcam and turn off automatic white balance, exposure, focus, etc.

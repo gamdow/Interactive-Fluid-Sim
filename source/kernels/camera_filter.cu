@@ -13,7 +13,7 @@ CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config)
   : __config(_block_config)
   , __last_mode(-1)
 {
-  format_out << "Constructing Camera Filter Kernel Buffers:" << std::endl;
+  format_out << "Constructing camera filter kernel buffers:" << std::endl;
   OutputIndent indent;
   Allocator alloc;
   __fluid_output.resize(alloc, __config.resolution.total_size());
@@ -24,9 +24,12 @@ CameraFilter::CameraFilter(OptimalBlockConfig const & _block_config)
 
 void CameraFilter::update(ArrayStructConst<uchar3> const & _camera_data, ArrayStructConst<float2> const & _flow_data, bool _mirror, int _mode, bool _bg_subtract, float _value, float _range) {
   if(__image_input.getSize() != _camera_data.resolution.total_size()) {
-    __image_input.resize(Allocator(), _camera_data.resolution.total_size());
-    __flow_input.resize(Allocator(), _camera_data.resolution.total_size());
-    __bg.resize(Allocator(), _camera_data.resolution.total_size());
+    format_out << "Resizing camera filter input buffers based on camera input resolution:" << std::endl;
+    OutputIndent indent;
+    Allocator alloc;
+    __image_input.resize(alloc, _camera_data.resolution.total_size());
+    __flow_input.resize(alloc, _camera_data.resolution.total_size());
+    __bg.resize(alloc, _camera_data.resolution.total_size());
   }
   checkCudaErrors(cudaMemcpy(__image_input, _camera_data.data, __image_input.getSizeBytes(), cudaMemcpyHostToDevice));
   checkCudaErrors(cudaMemcpy(__flow_input, _flow_data.data, __flow_input.getSizeBytes(), cudaMemcpyHostToDevice));

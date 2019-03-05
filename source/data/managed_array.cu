@@ -10,7 +10,7 @@
 #include "../cuda/utility.h"
 
 void Allocator::report() const {
-  format_out << "Total Host: " << __host_allocation_bytes_total << " bytes, Total Device: " << __device_allocation_bytes_total << " bytes" << std::endl;
+  format_out << "Total Host: " << FormatNumberWithCommas(__host_allocation_bytes_total) << " bytes, Total Device: " << FormatNumberWithCommas(__device_allocation_bytes_total) << " bytes" << std::endl;
 }
 
 template<typename T> bool Allocator::hostAllocate(T * & o_ptr, size_t _size) const {
@@ -32,11 +32,11 @@ template<typename T> bool Allocator::devicePitchAllocate(T * & o_ptr, size_t & o
 bool Allocator::reportAllocate(size_t & io_total, char const * _function_name, char const * _type_name, void const * _ptr, size_t _bytes) const {
   ++__allocation_count;
   if(_ptr != nullptr) {
-    format_out << _function_name << "<" << _type_name << ">: " << _bytes << " bytes (" << _ptr << ")" << std::endl;
+    format_out << _function_name << "<" << _type_name << ">: " << FormatNumberWithCommas(_bytes) << " bytes (" << _ptr << ")" << std::endl;
     io_total += _bytes;
     return true;
   } else {
-    format_out << _function_name << "<" << _type_name << ">: " << _bytes << " bytes FAILED!" << std::endl;
+    format_out << _function_name << "<" << _type_name << ">: " << FormatNumberWithCommas(_bytes) << " bytes FAILED!" << std::endl;
     return false;
   }
 }

@@ -14,16 +14,16 @@
 #include "renderer.h"
 #include "data/render_quad.h"
 
-bool const FULLSCREEN = true;//true;
+bool const FULLSCREEN = true;
 int const VIDCAM_INDEX = 0; //normally 0 if only one webcam
-int const BUFFER = 10u; // needed for advection which could sample outside renderable area
-float2 const LENGTH = {1.6f, 0.9f}; // dimension of the simulation
+int const BUFFER = 10u; // needed for advection which can sample outside renderable area
+float2 const LENGTH = {1.6f, 0.9f}; // length dimensions of the simulation
 
 bool const OPTICAL_FLOW = false; // very (10x) slow
 Resolution const RESOLUTION = Resolution(1280, 720); // higher -> slower
-float const FRAME_RATE = 30.0f; // target, will tune PSS to reach
-int const SIM_STEPS_PER_FRAME = 5; // higher -> higher max speed
-int const PRESSURE_SOLVER_STEPS = 100; // autotuned, good guess minimise oscillation at start
+float const FRAME_RATE = 30.0f; // target fps, will tune PSS to reach
+int const SIM_STEPS_PER_FRAME = 5; // higher -> higher max fluid velocity
+int const PRESSURE_SOLVER_STEPS = 100; // autotuned, good guess minimise oscillation at start, but higher -> more accurate
 
 // bool const OPTICAL_FLOW = true;
 // Resolution const RESOLUTION = Resolution(640, 360);
@@ -52,7 +52,9 @@ int main(int argc, char * argv[]) {
 
   std::cout << std::endl;
   OpenGL opengl(RESOLUTION, FULLSCREEN);
-  reportCudaCapability();
+  if(!reportCudaCapability()){
+    throw std::runtime_error("No CUDA capable device");
+  }
   OptimalBlockConfig blockConfig(Resolution(RESOLUTION, BUFFER, BUFFER));
   Interface interface(FRAME_RATE);
   defaultInterface(interface);
@@ -69,13 +71,17 @@ int main(int argc, char * argv[]) {
   try {
     camera = new CVCamera(OPTICAL_FLOW, VIDCAM_INDEX, RESOLUTION, FRAME_RATE);
   } catch (std::exception const & e) {
-    std::cout << e.what() << std::endl << std::endl;
+    {
+      OutputIndent indent;
+      format_out << e.what() << std::endl;
+    }
     delete camera;
     camera = new NullCamera(RESOLUTION);
     interface.filterMode() = FilterMode::LIGHTNESS;
     interface.filterValue() = 0.0f;
   }
   CameraFilter camera_filter(blockConfig);
+  camera_filter.update(camera->frameData(), camera->flowData(), interface.mirrorCam(), interface.filterMode(), interface.bgSubtract(), interface.filterValue(), interface.filterRange());
 
   std::cout << std::endl;
   TextRenderQuad interface_render(renderer);

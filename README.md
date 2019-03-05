@@ -20,5 +20,7 @@ Currently working on Ubuntu 18.04.2 LTS
 
 ### v4l2ucp
 `$ sudo apt install v4l2ucp`
+
 http://v4l2ucp.sourceforge.net
+
 Configure webcam and turn off automatic white balance, exposure, focus, etc.

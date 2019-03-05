@@ -18,6 +18,8 @@ NullCamera::NullCamera(Resolution _res)
   : Camera(_res, cv::Mat::zeros(_res.height, _res.width, CV_8UC3))
 {
   format_out << "Null Camera:" << std::endl;
+  OutputIndent indent;
+  format_out << "Generating debug camera image" << std::endl;
   float r = _res.height / 20;
   for(float k = -2.0f; k < 3.0f; k += 1.0f) {
     float odd = int(k) % 2;

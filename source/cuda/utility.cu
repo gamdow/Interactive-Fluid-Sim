@@ -4,7 +4,7 @@
 
 __global__ void pressure_solve(float * o_pressure, float const * _pressure, float const * _divergence, float const * _fluid, Resolution _buffer_res, float2 _dx);
 
-void reportCudaCapability() {
+bool reportCudaCapability() {
   format_out << "CUDA Capability: " << std::endl;
   int deviceCount = 0;
   cudaError_t error_id = cudaGetDeviceCount(&deviceCount);
@@ -19,6 +19,7 @@ void reportCudaCapability() {
     format_out << "Capability: " << deviceProp.major << "." << deviceProp.minor << std::endl;
     format_out << "Runtime/Driver: " << runtimeVersion << "/" << driverVersion << std::endl;
   }
+  return deviceCount > 0;
 }
 
 // Use CUDA's occupancy to determine the optimal blocksize and adjust the screen (and therefore array) resolution to be an integer multiple (then there's no need for bounds checking in the kernels).

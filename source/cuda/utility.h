@@ -18,7 +18,7 @@
   TYPED_MACRO(unsigned char) \
   TYPED_MACRO(uchar3)
 
-void reportCudaCapability();
+bool reportCudaCapability();
 
 struct OptimalBlockConfig {
   OptimalBlockConfig(Resolution _res);
